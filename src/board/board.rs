@@ -158,8 +158,14 @@ impl Board {
         Board{field, history, white_to_move, en_passant, castling, hmw, no, white_king_location, black_king_location}
     }
 
-    pub fn get_legal_moves(& self) -> Vec<Mov> {
-        
+    pub fn get_legal_moves(& self, in_check: u8) -> Vec<Mov> {
+        if in_check == 0 {
+            // check if in check :p
+        } else if in_check == 1 {
+            
+        } else if in_check == 2 {
+            
+        }
         //
         Vec::new()
     }
@@ -175,7 +181,8 @@ impl Board {
         println!();
     }
 
-    fn check_if_in_check(& self, current_color: bool) -> bool {
+    // this is rather slow and should not be extensive used
+    fn is_in_check(& self, current_color: bool) -> bool {
         let coord: &Coord;
         // if white_to_move and current_color, we are searching for black pieces attacking white king
         let color = current_color ^ self.white_to_move;
@@ -184,15 +191,22 @@ impl Board {
         } else {
             coord = &self.white_king_location;
         }
-        self.if_under_attack(coord.y, coord.x, color)
+        self.is_under_attack(coord.y, coord.x, color)
     }
 
     // if color is WHITE, we are searching for WHITE threats for a BLACK piece
     // 1 stands for WHITE, 0 stands for BLACK
-    fn if_under_attack(& self, y: usize, x: usize, color_of_attacker: bool) -> bool {
-        let mut piece: u8;
+    fn is_under_attack(& self, y: usize, x: usize, color_of_attacker: bool) -> bool {
         let color_bit = color_of_attacker as u8;
-        // check if opponent's knight is attacking this cell
+        self.is_under_attack_n(y, x, color_bit) || 
+        self.is_under_attack_bq(y, x, color_bit) || 
+        self.is_under_attack_rq(y, x, color_bit) ||
+        self.is_under_attack_k(y, x, color_of_attacker) ||
+        self.is_under_attack_p(y, x, color_of_attacker)
+    }
+
+    // check if opponent's knight is attacking this cell
+    fn is_under_attack_n(& self, y: usize, x: usize, color_bit: u8) -> bool {
         for i in 1..2 {
             if in_bound(y, x + i, i, 3) && self.field[y - i][x + i - 3] == PIECES[&'n'] + color_bit {
                 return true;
@@ -207,8 +221,13 @@ impl Board {
                 return true;
             }
         }
-        // check if opponent's biship or queen is attacking this cell
+        false
+    }
+
+    // check if opponent's biship or queen is attacking this cell by diagonal
+    fn is_under_attack_bq(& self, y: usize, x: usize, color_bit: u8) -> bool {
         let mut i: usize = 1;
+        let mut piece: u8;
         while in_bound(y, x, i, i) {
             piece = self.field[y - i][x - i];
             i += 1;
@@ -268,8 +287,13 @@ impl Board {
                 break;
             }
         }
-        // check if opponent's rook or queen is attacking this cell
-        i = 1;
+        false
+    }
+
+    // check if opponent's rook or queen is attacking this cell by horizontal or vertical
+    fn is_under_attack_rq(& self, y: usize, x: usize, color_bit: u8) -> bool {
+        let mut i: usize = 1;
+        let mut piece: u8;
         while in_bound(y, x, i, 0) {
             piece = self.field[y - i][x];
             i += 1;
@@ -329,7 +353,11 @@ impl Board {
                 break;
             }
         }
-        // check if opponent's king is attacking this cell
+        false
+    }
+
+    // check if opponent's king is attacking this cell
+    fn is_under_attack_k(& self, y: usize, x: usize, color_of_attacker: bool) -> bool {
         let king: &Coord;
         if color_of_attacker {
             king = &self.black_king_location;
@@ -339,7 +367,11 @@ impl Board {
         if max(king.y, y) - min(king.y, y) < 2 && max(king.x, x) - min(king.x, x) < 2 {
             return true;
         }
-        // check if opponent's pawn is attacking this cell
+        false
+    }
+
+    // check if opponent's pawn is attacking this cell
+    fn is_under_attack_p(& self, y: usize, x: usize, color_of_attacker: bool) -> bool {
         if color_of_attacker {
             if in_bound(y + 1, x + 1, 0, 0) && self.field[y + 1][x + 1] == PIECES[&'P'] {
                 return true;
