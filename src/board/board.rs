@@ -5,6 +5,7 @@ use std::char;
 use std::cmp::{max, min};
 use std::vec::Vec;
 
+// full commentary in Board struct constructor
 pub static PIECES: phf::Map<char, u8> = phf_map! {
     ' ' => 0,
     'p' => 2,
@@ -19,6 +20,22 @@ pub static PIECES: phf::Map<char, u8> = phf_map! {
     'R' => 11,
     'q' => 12,
     'Q' => 13
+};
+
+// full commentary in Board struct constructor
+pub static CASTLES: phf::Map<char, u8> = phf_map! {
+    'K' => 128,
+    'Q' => 64,
+    'k' => 32,
+    'q' => 16
+};
+
+// full commentary in Mov struct constructor
+pub static BITS: phf::Map<char, u8> = phf_map! {
+    '#' => 128,
+    '+' => 64,
+    'x' => 32,
+    '=' => 16
 };
 
 pub enum Check {
@@ -422,161 +439,217 @@ impl Board {
         self.en_passant.y == y && self.en_passant.x == x
     }
 
-    // if that square is empty or has a piece of a color_bit color, this move will be added
+    // if possible square for a knight is empty or has a piece of a color_bit color, this move will be added
     fn add_legal_moves_n(& self, vec: &mut Vec<Mov>, y: usize, x: usize, color_bit: u8) {
+        let mut coord: Coord;
+        let mut piece: u8;
         for i in 1..2 {
             if in_bound(y + 3, x + i, i, 0) {
-                let coord = Coord{y: y + 3 - i, x: x + i};
-                let piece = self.field[coord.y][coord.x];
+                coord = Coord{y: y + 3 - i, x: x + i};
+                piece = self.field[coord.y][coord.x];
                 if piece == 0 {
                     vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
                 } else if piece & 1 != color_bit {
-                    vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+                    vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
                 }
             }
             if in_bound(y, x + 3, i, i) {
-                let coord = Coord{y: y - i, x: x + 3 - i};
-                let piece = self.field[coord.y][coord.x];
+                coord = Coord{y: y - i, x: x + 3 - i};
+                piece = self.field[coord.y][coord.x];
                 if piece == 0 {
                     vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
                 } else if piece & 1 != color_bit {
-                    vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+                    vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
                 }
             }
             if in_bound(y + i, x, 3, i) {
-                let coord = Coord{y: y + i - 3, x: x - i};
-                let piece = self.field[coord.y][coord.x];
+                coord = Coord{y: y + i - 3, x: x - i};
+                piece = self.field[coord.y][coord.x];
                 if piece == 0 {
                     vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
                 } else if piece & 1 != color_bit {
-                    vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+                    vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
                 }
             }
             if in_bound(y + i, x + i, 0, 3) {
-                let coord = Coord{y: y + i, x: x + i - 3};
-                let piece = self.field[coord.y][coord.x];
+                coord = Coord{y: y + i, x: x + i - 3};
+                piece = self.field[coord.y][coord.x];
                 if piece == 0 {
                     vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
                 } else if piece & 1 != color_bit {
-                    vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+                    vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
                 }
             }
         }
     }
 
+    // add all possible diagonal moves from (y, x) to vec, including captures
     fn add_legal_moves_bq(& self, vec: &mut Vec<Mov>, y: usize, x: usize, color_bit: u8) {
         let mut i: usize = 1;
+        let mut coord: Coord;
         let mut piece: u8;
         while in_bound(y, x, i, i) {
-            let piece = self.field[y - i][y - x];
-            if piece == 0 {
-                vec.push(Mov{data: 0, from: Coord{y, x}, to: Coord{y: y - 1, x: x - 1}});
-            } else if piece & 1 != color_bit {
-                vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: Coord{y: y - 1, x: x - 1}})
-            } else {
-                break;
-            }
-        //         if piece == 0 {
-        //             vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
-        //         } else if piece & 1 != color_bit {
-        //             vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
-        //         }
+            coord = Coord{y: y - i, x: x - i};
             piece = self.field[y - i][x - i];
             i += 1;
-            if piece > 0 {
-                piece -= color_bit;
-            } else {
-                continue;
-            }
-            if piece == PIECES[&'b'] || piece == PIECES[&'q'] {
-                return true;
+            if piece == 0 {
+                vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+            } else if piece & 1 != color_bit {
+                vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
             } else {
                 break;
             }
         }
         i = 1;
         while in_bound(y, x + i, i, 0) {
+            coord = Coord{y: y - i, x: x + i};
             piece = self.field[y - i][x + i];
             i += 1;
-            if piece > 0 {
-                piece -= color_bit;
-            } else {
-                continue;
-            }
-            if piece == PIECES[&'b'] || piece == PIECES[&'q'] {
-                return true;
+            if piece == 0 {
+                vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+            } else if piece & 1 != color_bit {
+                vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
             } else {
                 break;
             }
         }
         i = 1;
         while in_bound(y + i, x + i, 0, 0) {
+            coord = Coord{y: y + i, x: x + i};
             piece = self.field[y + i][x + i];
             i += 1;
-            if piece > 0 {
-                piece -= color_bit;
-            } else {
-                continue;
-            }
-            if piece == PIECES[&'b'] || piece == PIECES[&'q'] {
-                return true;
+            if piece == 0 {
+                vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+            } else if piece & 1 != color_bit {
+                vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
             } else {
                 break;
             }
         }
         i = 1;
         while in_bound(y + i, x, 0, i) {
+            coord = Coord{y: y + i, x: x - i};
             piece = self.field[y + i][x - i];
             i += 1;
-            if piece > 0 {
-                piece -= color_bit;
-            } else {
-                continue;
-            }
-            if piece == PIECES[&'b'] || piece == PIECES[&'q'] {
-                return true;
+            if piece == 0 {
+                vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+            } else if piece & 1 != color_bit {
+                vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
             } else {
                 break;
             }
         }
-        // for i in 1..2 {
-        //     if in_bound(y + 3, x + i, i, 0) {
-        //         let coord = Coord{y: y + 3 - i, x: x + i};
-        //         let piece = self.field[coord.y][coord.x];
-        //         if piece == 0 {
-        //             vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
-        //         } else if piece & 1 != color_bit {
-        //             vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
-        //         }
-        //     }
-        //     if in_bound(y, x + 3, i, i) {
-        //         let coord = Coord{y: y - i, x: x + 3 - i};
-        //         let piece = self.field[coord.y][coord.x];
-        //         if piece == 0 {
-        //             vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
-        //         } else if piece & 1 != color_bit {
-        //             vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
-        //         }
-        //     }
-        //     if in_bound(y + i, x, 3, i) {
-        //         let coord = Coord{y: y + i - 3, x: x - i};
-        //         let piece = self.field[coord.y][coord.x];
-        //         if piece == 0 {
-        //             vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
-        //         } else if piece & 1 != color_bit {
-        //             vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
-        //         }
-        //     }
-        //     if in_bound(y + i, x + i, 0, 3) {
-        //         let coord = Coord{y: y + i, x: x + i - 3};
-        //         let piece = self.field[coord.y][coord.x];
-        //         if piece == 0 {
-        //             vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
-        //         } else if piece & 1 != color_bit {
-        //             vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
-        //         }
-        //     }
-        // }
+    }
+
+    // add all possible straight moves from (y, x) to vec, including captures
+    fn add_legal_moves_rq(& self, vec: &mut Vec<Mov>, y: usize, x: usize, color_bit: u8) {
+        let mut i: usize = 1;
+        let mut coord: Coord;
+        let mut piece: u8;
+        while in_bound(y, x, i, 0) {
+            coord = Coord{y: y - i, x: x};
+            piece = self.field[y - i][x];
+            i += 1;
+            if piece == 0 {
+                vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+            } else if piece & 1 != color_bit {
+                vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
+            } else {
+                break;
+            }
+        }
+        i = 1;
+        while in_bound(y + i, x, 0, 0) {
+            coord = Coord{y: y + i, x: x};
+            piece = self.field[y + i][x];
+            i += 1;
+            if piece == 0 {
+                vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+            } else if piece & 1 != color_bit {
+                vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
+            } else {
+                break;
+            }
+        }
+        i = 1;
+        while in_bound(y, x + i, 0, 0) {
+            coord = Coord{y: y, x: x + i};
+            piece = self.field[y][x + i];
+            i += 1;
+            if piece == 0 {
+                vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+            } else if piece & 1 != color_bit {
+                vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
+            } else {
+                break;
+            }
+        }
+        i = 1;
+        while in_bound(y, x, 0, i) {
+            coord = Coord{y: y, x: x - i};
+            piece = self.field[y][x - i];
+            i += 1;
+            if piece == 0 {
+                vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+            } else if piece & 1 != color_bit {
+                vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
+            } else {
+                break;
+            }
+        }
+    }
+
+    // add all possible king moves from (y, x) to vec, including captures and castlings
+    fn add_legal_moves_k(& self, vec: &mut Vec<Mov>, y: usize, x: usize, color_bit: u8, check_status: Option<Check>) {
+        let mut coord: Coord;
+        let mut piece: u8;
+        for i in 0..2 {
+            for j in 0..2 {
+                if in_bound(y + i, x + j, 1, 1) {
+                    coord = Coord{y: y + i - 1, x: x + j - 1};
+                    piece = self.field[y + i - 1][x + j - 1];
+                    if piece == 0 {
+                        vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+                    } else if piece & 1 != color_bit {
+                        vec.push(Mov{data: piece + BITS[&'x'], from: Coord{y, x}, to: coord});
+                    }
+                }
+            }
+        }
+        // todo - check if in check already, use option check_status for faster analysis
+        if color_bit == 1 {
+            if self.castling & CASTLES[&'K'] > 0 && self.field[0][5] == 0 && self.field[0][6] == 0 {
+                if !(self.is_under_attack(0, 5, false, [true; 5]) || self.is_under_attack(0, 6, false, [true; 5])) {
+                    vec.push(Mov{data: BITS[&'='], from: Coord{y: 0, x: 4}, to: Coord{y: 0, x: 6}});
+                }
+            }
+            if self.castling & CASTLES[&'Q'] > 0 && self.field[0][3] == 0 && self.field[0][2] == 0 && self.field[0][1] == 0 {
+                if !(self.is_under_attack(0, 3, false, [true; 5]) || self.is_under_attack(0, 2, false, [true; 5])) {
+                    vec.push(Mov{data: BITS[&'='], from: Coord{y: 0, x: 4}, to: Coord{y: 0, x: 2}});
+                }
+            }
+        } else {
+            if self.castling & CASTLES[&'k'] > 0 && self.field[7][5] == 0 && self.field[7][6] == 0 {
+                vec.push(Mov{data: BITS[&'='], from: Coord{y: 7, x: 4}, to: Coord{y: 7, x: 6}});
+            }
+            if self.castling & CASTLES[&'q'] > 0 && self.field[7][3] == 0 && self.field[7][2] == 0 && self.field[7][1] == 0 {
+                vec.push(Mov{data: BITS[&'='], from: Coord{y: 7, x: 4}, to: Coord{y: 0, x: 2}});
+            }
+        }
+    }
+
+    // add all possible pawn moves from (y, x) to vec, including captures, promotions and en passant
+    fn add_legal_moves_p(& self, vec: &mut Vec<Mov>, y: usize, x: usize, color_bit: u8) {
+        if color_bit == 1 {
+            
+        } else {
+
+        }
+        // 1 move forward
+        // 2 moves forward
+        // left & right captures
+        // en passant
+        // promotion
     }
 }
 
