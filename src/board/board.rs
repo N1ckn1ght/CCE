@@ -5,7 +5,7 @@ use std::char;
 use std::cmp::{max, min};
 use std::vec::Vec;
 
-static PIECES: phf::Map<char, u8> = phf_map! {
+pub static PIECES: phf::Map<char, u8> = phf_map! {
     ' ' => 0,
     'p' => 2,
     'P' => 3,
@@ -20,6 +20,13 @@ static PIECES: phf::Map<char, u8> = phf_map! {
     'q' => 12,
     'Q' => 13
 };
+
+pub enum Check {
+    NotInCheck,
+    InCheck,
+    InDoubleCheck,
+    InMate
+}
 
 #[derive(Clone)]
 pub struct Board {
@@ -153,20 +160,46 @@ impl Board {
             }
         }
 
-        // TODO: check if king is in check
-
         Board{field, history, white_to_move, en_passant, castling, hmw, no, white_king_location, black_king_location}
     }
 
-    pub fn get_legal_moves(& self, in_check: u8) -> Vec<Mov> {
-        if in_check == 0 {
-            // check if in check :p
-        } else if in_check == 1 {
-            
-        } else if in_check == 2 {
-            
+    pub fn get_legal_moves(& self, check_status: Option<Check>) -> Vec<Mov> {
+        let check: Check = check_status.unwrap_or(Check::InCheck);
+        let color_bit: u8 = self.white_to_move as u8;
+        match check {
+            Check::NotInCheck => {
+                // scan for any moves
+            },
+            Check::InCheck => {
+                // scan for any moves carefully
+                for y in 0..7 {
+                    for x in 0..7 {
+                        if self.field[y][x] > 0 {
+                            let piece = self.field[y][x] - color_bit;
+                            if piece == PIECES[&'p'] {
+
+                            } else if piece == PIECES[&'k'] {
+
+                            } else if piece == PIECES[&'n'] {
+
+                            } else if piece == PIECES[&'b'] {
+                                // search diag
+                            } else if piece == PIECES[&'r'] {
+                                // search straight
+                            } else if piece == PIECES[&'q'] {
+                                // search diag & straight
+                            }
+                        }
+                    }
+                }
+            },
+            Check::InDoubleCheck => {
+                // scan for only king moves
+            },
+            Check::InMate => {
+                return Vec::new()
+            }
         }
-        //
         Vec::new()
     }
 
@@ -181,43 +214,41 @@ impl Board {
         println!();
     }
 
-    // this is rather slow and should not be extensive used
-    fn is_in_check(& self, current_color: bool) -> bool {
-        let coord: &Coord;
+    pub fn get_current_king_coord(& self, is_current_color: bool) -> &Coord {
         // if white_to_move and current_color, we are searching for black pieces attacking white king
-        let color = current_color ^ self.white_to_move;
+        let color = is_current_color ^ self.white_to_move;
         if color {
-            coord = &self.black_king_location;
+            &self.black_king_location
         } else {
-            coord = &self.white_king_location;
+            &self.white_king_location
         }
-        self.is_under_attack(coord.y, coord.x, color)
     }
 
+    // this is rather slow and should not be extensive used
     // if color is WHITE, we are searching for WHITE threats for a BLACK piece
     // 1 stands for WHITE, 0 stands for BLACK
-    fn is_under_attack(& self, y: usize, x: usize, color_of_attacker: bool) -> bool {
+    pub fn is_under_attack(& self, y: usize, x: usize, color_of_attacker: bool, checks: [bool; 5]) -> bool {
         let color_bit = color_of_attacker as u8;
-        self.is_under_attack_n(y, x, color_bit) || 
-        self.is_under_attack_bq(y, x, color_bit) || 
-        self.is_under_attack_rq(y, x, color_bit) ||
-        self.is_under_attack_k(y, x, color_of_attacker) ||
-        self.is_under_attack_p(y, x, color_of_attacker)
+        (checks[0] && self.is_under_attack_bq(y, x, color_bit)) || 
+        (checks[1] && self.is_under_attack_rq(y, x, color_bit)) ||
+        (checks[2] && self.is_under_attack_n(y, x, color_bit)) || 
+        (checks[3] && self.is_under_attack_k(y, x, color_of_attacker)) ||
+        (checks[4] && self.is_under_attack_p(y, x, color_of_attacker))
     }
 
     // check if opponent's knight is attacking this cell
     fn is_under_attack_n(& self, y: usize, x: usize, color_bit: u8) -> bool {
         for i in 1..2 {
-            if in_bound(y, x + i, i, 3) && self.field[y - i][x + i - 3] == PIECES[&'n'] + color_bit {
+            if in_bound(y + 3, x + i, i, 0) && self.field[y + 3 - i][x + i] == PIECES[&'n'] + color_bit {
                 return true;
             }
-            if in_bound(y, x + i, i, 3) && self.field[y - i][x + i - 3] == PIECES[&'n'] + color_bit {
+            if in_bound(y, x + 3, i, i) && self.field[y - i][x + 3 - i] == PIECES[&'n'] + color_bit {
                 return true;
             }
-            if in_bound(y, x + i, i, 3) && self.field[y - i][x + i - 3] == PIECES[&'n'] + color_bit {
+            if in_bound(y + i, x, 3, i) && self.field[y + i - 3][x - i] == PIECES[&'n'] + color_bit {
                 return true;
             }
-            if in_bound(y, x + i, i, 3) && self.field[y - i][x + i - 3] == PIECES[&'n'] + color_bit {
+            if in_bound(y + i, x + i, 0, 3) && self.field[y + i][x + i - 3] == PIECES[&'n'] + color_bit {
                 return true;
             }
         }
@@ -390,6 +421,170 @@ impl Board {
         // check for en_passant, though this is a very specific case that may never be used
         self.en_passant.y == y && self.en_passant.x == x
     }
+
+    // if that square is empty or has a piece of a color_bit color, this move will be added
+    fn add_legal_moves_n(& self, vec: &mut Vec<Mov>, y: usize, x: usize, color_bit: u8) {
+        for i in 1..2 {
+            if in_bound(y + 3, x + i, i, 0) {
+                let coord = Coord{y: y + 3 - i, x: x + i};
+                let piece = self.field[coord.y][coord.x];
+                if piece == 0 {
+                    vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+                } else if piece & 1 != color_bit {
+                    vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+                }
+            }
+            if in_bound(y, x + 3, i, i) {
+                let coord = Coord{y: y - i, x: x + 3 - i};
+                let piece = self.field[coord.y][coord.x];
+                if piece == 0 {
+                    vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+                } else if piece & 1 != color_bit {
+                    vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+                }
+            }
+            if in_bound(y + i, x, 3, i) {
+                let coord = Coord{y: y + i - 3, x: x - i};
+                let piece = self.field[coord.y][coord.x];
+                if piece == 0 {
+                    vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+                } else if piece & 1 != color_bit {
+                    vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+                }
+            }
+            if in_bound(y + i, x + i, 0, 3) {
+                let coord = Coord{y: y + i, x: x + i - 3};
+                let piece = self.field[coord.y][coord.x];
+                if piece == 0 {
+                    vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+                } else if piece & 1 != color_bit {
+                    vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+                }
+            }
+        }
+    }
+
+    fn add_legal_moves_bq(& self, vec: &mut Vec<Mov>, y: usize, x: usize, color_bit: u8) {
+        let mut i: usize = 1;
+        let mut piece: u8;
+        while in_bound(y, x, i, i) {
+            let piece = self.field[y - i][y - x];
+            if piece == 0 {
+                vec.push(Mov{data: 0, from: Coord{y, x}, to: Coord{y: y - 1, x: x - 1}});
+            } else if piece & 1 != color_bit {
+                vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: Coord{y: y - 1, x: x - 1}})
+            } else {
+                break;
+            }
+        //         if piece == 0 {
+        //             vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+        //         } else if piece & 1 != color_bit {
+        //             vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+        //         }
+            piece = self.field[y - i][x - i];
+            i += 1;
+            if piece > 0 {
+                piece -= color_bit;
+            } else {
+                continue;
+            }
+            if piece == PIECES[&'b'] || piece == PIECES[&'q'] {
+                return true;
+            } else {
+                break;
+            }
+        }
+        i = 1;
+        while in_bound(y, x + i, i, 0) {
+            piece = self.field[y - i][x + i];
+            i += 1;
+            if piece > 0 {
+                piece -= color_bit;
+            } else {
+                continue;
+            }
+            if piece == PIECES[&'b'] || piece == PIECES[&'q'] {
+                return true;
+            } else {
+                break;
+            }
+        }
+        i = 1;
+        while in_bound(y + i, x + i, 0, 0) {
+            piece = self.field[y + i][x + i];
+            i += 1;
+            if piece > 0 {
+                piece -= color_bit;
+            } else {
+                continue;
+            }
+            if piece == PIECES[&'b'] || piece == PIECES[&'q'] {
+                return true;
+            } else {
+                break;
+            }
+        }
+        i = 1;
+        while in_bound(y + i, x, 0, i) {
+            piece = self.field[y + i][x - i];
+            i += 1;
+            if piece > 0 {
+                piece -= color_bit;
+            } else {
+                continue;
+            }
+            if piece == PIECES[&'b'] || piece == PIECES[&'q'] {
+                return true;
+            } else {
+                break;
+            }
+        }
+        // for i in 1..2 {
+        //     if in_bound(y + 3, x + i, i, 0) {
+        //         let coord = Coord{y: y + 3 - i, x: x + i};
+        //         let piece = self.field[coord.y][coord.x];
+        //         if piece == 0 {
+        //             vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+        //         } else if piece & 1 != color_bit {
+        //             vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+        //         }
+        //     }
+        //     if in_bound(y, x + 3, i, i) {
+        //         let coord = Coord{y: y - i, x: x + 3 - i};
+        //         let piece = self.field[coord.y][coord.x];
+        //         if piece == 0 {
+        //             vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+        //         } else if piece & 1 != color_bit {
+        //             vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+        //         }
+        //     }
+        //     if in_bound(y + i, x, 3, i) {
+        //         let coord = Coord{y: y + i - 3, x: x - i};
+        //         let piece = self.field[coord.y][coord.x];
+        //         if piece == 0 {
+        //             vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+        //         } else if piece & 1 != color_bit {
+        //             vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+        //         }
+        //     }
+        //     if in_bound(y + i, x + i, 0, 3) {
+        //         let coord = Coord{y: y + i, x: x + i - 3};
+        //         let piece = self.field[coord.y][coord.x];
+        //         if piece == 0 {
+        //             vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
+        //         } else if piece & 1 != color_bit {
+        //             vec.push(Mov{data: piece + 32, from: Coord{y, x}, to: coord});
+        //         }
+        //     }
+        // }
+    }
+}
+
+pub fn in_bound(y: usize, x: usize, y_sub: usize, x_sub: usize) -> bool {
+    if y > 7 + y_sub || x > 7 + x_sub || y_sub > y || x_sub > x {
+        return false;
+    }
+    true
 }
 
 fn get_default_board() -> [[u8; 8]; 8] {
@@ -415,13 +610,6 @@ fn get_default_board() -> [[u8; 8]; 8] {
     field[7][6] = PIECES[&'n'];
     field[7][7] = PIECES[&'r'];
     field
-}
-
-fn in_bound(y: usize, x: usize, y_sub: usize, x_sub: usize) -> bool {
-    if y > 7 + y_sub || x > 7 + x_sub || y_sub > y || x_sub > x {
-        return false;
-    }
-    true
 }
 
 fn piece_to_value(piece: char) -> u8 {
