@@ -38,7 +38,17 @@ pub static BITS: phf::Map<char, u8> = phf_map! {
     '=' => 16
 };
 
+// full commentary in Mov struct constructor
+pub static PROMOTION: phf::Map<char, u8> = phf_map! {
+    'q' => 3,
+    'n' => 2,
+    'r' => 1,
+    'b' => 0
+};
+
+#[derive(PartialEq)]
 pub enum Check {
+    Unknown,
     NotInCheck,
     InCheck,
     InDoubleCheck,
@@ -181,9 +191,12 @@ impl Board {
     }
 
     pub fn get_legal_moves(& self, check_status: Option<Check>) -> Vec<Mov> {
-        let check: Check = check_status.unwrap_or(Check::InCheck);
+        let check: Check = check_status.unwrap_or(Check::Unknown);
         let color_bit: u8 = self.white_to_move as u8;
         match check {
+            Check::Unknown => {
+                // scan for any moves carefully
+            }
             Check::NotInCheck => {
                 // scan for any moves
             },
@@ -439,7 +452,7 @@ impl Board {
         self.en_passant.y == y && self.en_passant.x == x
     }
 
-    // if possible square for a knight is empty or has a piece of a color_bit color, this move will be added
+    // if possible square for a knight is empty or has a piece of not a color_bit color, this move will be added
     fn add_legal_moves_n(& self, vec: &mut Vec<Mov>, y: usize, x: usize, color_bit: u8) {
         let mut coord: Coord;
         let mut piece: u8;
@@ -616,24 +629,34 @@ impl Board {
                 }
             }
         }
-        // todo - check if in check already, use option check_status for faster analysis
-        if color_bit == 1 {
-            if self.castling & CASTLES[&'K'] > 0 && self.field[0][5] == 0 && self.field[0][6] == 0 {
-                if !(self.is_under_attack(0, 5, false, [true; 5]) || self.is_under_attack(0, 6, false, [true; 5])) {
-                    vec.push(Mov{data: BITS[&'='], from: Coord{y: 0, x: 4}, to: Coord{y: 0, x: 6}});
+        let check: Check = check_status.unwrap_or(Check::Unknown);
+        if check == Check::NotInCheck || check == Check::Unknown {
+            if color_bit == 1 {
+                if self.castling & CASTLES[&'K'] > 0 && self.field[0][5] == 0 && self.field[0][6] == 0 {
+                    if !(self.is_under_attack(0, 5, false, [true; 5]) || self.is_under_attack(0, 6, false, [true; 5])) {
+                        if check == Check::NotInCheck || !self.is_under_attack(0, 4, false, [true, true, true, false, true]) {
+                            vec.push(Mov{data: BITS[&'='], from: Coord{y: 0, x: 4}, to: Coord{y: 0, x: 6}});
+                        }
+                    }
                 }
-            }
-            if self.castling & CASTLES[&'Q'] > 0 && self.field[0][3] == 0 && self.field[0][2] == 0 && self.field[0][1] == 0 {
-                if !(self.is_under_attack(0, 3, false, [true; 5]) || self.is_under_attack(0, 2, false, [true; 5])) {
-                    vec.push(Mov{data: BITS[&'='], from: Coord{y: 0, x: 4}, to: Coord{y: 0, x: 2}});
+                if self.castling & CASTLES[&'Q'] > 0 && self.field[0][3] == 0 && self.field[0][2] == 0 && self.field[0][1] == 0 {
+                    if !(self.is_under_attack(0, 3, false, [true; 5]) || self.is_under_attack(0, 2, false, [true; 5])) {
+                        if check == Check::NotInCheck || !self.is_under_attack(0, 4, false, [true, true, true, false, true]) {
+                            vec.push(Mov{data: BITS[&'='], from: Coord{y: 0, x: 4}, to: Coord{y: 0, x: 2}});
+                        }
+                    }
                 }
-            }
-        } else {
-            if self.castling & CASTLES[&'k'] > 0 && self.field[7][5] == 0 && self.field[7][6] == 0 {
-                vec.push(Mov{data: BITS[&'='], from: Coord{y: 7, x: 4}, to: Coord{y: 7, x: 6}});
-            }
-            if self.castling & CASTLES[&'q'] > 0 && self.field[7][3] == 0 && self.field[7][2] == 0 && self.field[7][1] == 0 {
-                vec.push(Mov{data: BITS[&'='], from: Coord{y: 7, x: 4}, to: Coord{y: 0, x: 2}});
+            } else {
+                if self.castling & CASTLES[&'k'] > 0 && self.field[7][5] == 0 && self.field[7][6] == 0 {
+                    if check == Check::NotInCheck || !self.is_under_attack(7, 4, false, [true, true, true, false, true]) {
+                        vec.push(Mov{data: BITS[&'='], from: Coord{y: 7, x: 4}, to: Coord{y: 7, x: 6}});
+                    }
+                }
+                if self.castling & CASTLES[&'q'] > 0 && self.field[7][3] == 0 && self.field[7][2] == 0 && self.field[7][1] == 0 {
+                    if check == Check::NotInCheck || !self.is_under_attack(7, 4, false, [true, true, true, false, true]) {
+                        vec.push(Mov{data: BITS[&'='], from: Coord{y: 7, x: 4}, to: Coord{y: 7, x: 2}});
+                    }
+                }
             }
         }
     }
@@ -641,9 +664,20 @@ impl Board {
     // add all possible pawn moves from (y, x) to vec, including captures, promotions and en passant
     fn add_legal_moves_p(& self, vec: &mut Vec<Mov>, y: usize, x: usize, color_bit: u8) {
         if color_bit == 1 {
-            
-        } else {
+            if y == 6 {
+                if self.field[7][x] == 0 {
+                    vec.push(Mov{data: BITS[&'='] + PROMOTION[&'q'] << 2, from: Coord{y, x}, to: Coord{y: y + 1, x}});
+                    vec.push(Mov{data: BITS[&'='] + PROMOTION[&'n'] << 2, from: Coord{y, x}, to: Coord{y: y + 1, x}});
+                    vec.push(Mov{data: BITS[&'='] + PROMOTION[&'r'] << 2, from: Coord{y, x}, to: Coord{y: y + 1, x}});
+                    vec.push(Mov{data: BITS[&'='] + PROMOTION[&'b'] << 2, from: Coord{y, x}, to: Coord{y: y + 1, x}});
+                }
+            } else {
 
+            }
+        } else {
+            if y == 1 {
+                
+            }
         }
         // 1 move forward
         // 2 moves forward
