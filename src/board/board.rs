@@ -1,5 +1,6 @@
 use crate::board::coord::Coord;
 use crate::board::mov::Mov;
+use crate::board::mov::BMov;
 use phf::phf_map;
 use std::char;
 use std::cmp::{max, min};
@@ -41,7 +42,7 @@ pub static PROMOTION: phf::Map<char, u8> = phf_map! {
     'b' => 0
 };
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum Check {
     Unknown,
     NotInCheck,
@@ -60,7 +61,7 @@ pub struct Board {
     // white will have their pieces on 0, 1 horizontals, black on 6, 7
     pub field: [[u8; 8]; 8],
     // move storage for a takeback function
-    history: Vec<Mov>,
+    history: Vec<BMov>,
     // 1 - white to move, 0 - black to move 
     white_to_move: bool,
     // coordinate of en passant if possible, otherwise 8, 8
@@ -184,39 +185,118 @@ impl Board {
 
         Board{field, history, white_to_move, en_passant, castling, hmw, no, white_king_location, black_king_location}
     }
+    
+    // Careful: this function WILL MAKE A MOVE without additional checks on if it's a legal move or not!
+    pub fn make_move(& self, mov: Mov) {
+        let piece = self.field[mov.from.y as usize][mov.from.x as usize];
+
+        // make a move
+        self.history.push(BMov{mov, castling: self.castling, en_passant: self.en_passant});
+        self.field[mov.to.y as usize][mov.to.x as usize] = self.field[mov.from.y as usize][mov.from.x as usize];
+        self.field[mov.from.y as usize][mov.from.x as usize] = 0;
+        
+        // update king locations + check for special cases (this one is castle)
+        if piece == PIECES[&'k'] {
+            self.black_king_location = Coord{y: mov.to.y, x: mov.to.x};
+            self.castling &= 192;
+            if mov.data & 1 == 1 {
+                if mov.to.x == 6 {
+                    // Yep, it should be possible to castle even without the initial rook odd!!
+                    self.field[7][5] = self.field[7][7];
+                    self.field[7][7] = 0;
+                } else {
+                    self.field[7][3] = self.field[7][0];
+                    self.field[7][0] = 0;
+                }
+            }
+        } else if piece == PIECES[&'K'] {
+            self.white_king_location = Coord{y: mov.to.y, x: mov.to.x};
+            self.castling &= 48;
+            if mov.data & 1 == 1 {
+                if mov.to.x == 6 {
+                    self.field[0][5] = self.field[0][7];
+                    self.field[0][7] = 0;
+                } else {
+                    self.field[0][3] = self.field[0][0];
+                    self.field[0][0] = 0;
+                }
+            }
+        } 
+        // other special cases
+        else if mov.data & 1 == 1 {
+            // en passant
+            if piece == PIECES[&'p'] {
+                self.field[self.en_passant.y as usize - 1][self.en_passant.x as usize] = 0;
+            } else if piece == PIECES[&'P'] {
+                self.field[self.en_passant.y as usize + 1][self.en_passant.x as usize] = 0;
+            }
+        }
+        // watchout for a rook move that will prevent future castling as well
+        else if piece == PIECES[&'r'] {
+            if mov.from.y == 7 {
+                if mov.from.x == 0 {
+                    self.castling &= 16;
+                } else if mov.from.x == 7 {
+                    self.castling &= 32;
+                }
+            }
+        } else if piece == PIECES[&'R'] {
+            if mov.from.y == 0 {
+                if mov.from.x == 0 {
+                    self.castling &= 64;
+                } else if mov.from.x == 7 {
+                    self.castling &= 128;
+                }
+            }
+        }
+    }
+
+    pub fn revert_move(& self, mov: Mov) {
+        
+    }
 
     pub fn get_legal_moves(& self, check_status: Option<Check>) -> Vec<Mov> {
+        let mut moves: Vec<Mov> = vec![];
         let check: Check = check_status.unwrap_or(Check::Unknown);
         let color_bit: u8 = self.white_to_move as u8;
         match check {
-            Check::Unknown => {
+            Check::Unknown | Check::InCheck => {
                 // scan for any moves carefully
+                for y in 0..7 {
+                    for x in 0..7 {
+                        if self.field[y as usize][x as usize] > 0 {
+                            let piece = self.field[y as usize][x as usize] - color_bit;
+                            if piece == PIECES[&'p'] {
+                                self.add_legal_moves_p(&mut moves, y, x, color_bit);
+                            } else if piece == PIECES[&'k'] {
+                                self.add_legal_moves_k(&mut moves, y, x, color_bit, check_status);
+                            } else if piece == PIECES[&'n'] {
+                                self.add_legal_moves_n(&mut moves, y, x, color_bit);
+                            } else if piece == PIECES[&'b'] {
+                                self.add_legal_moves_bq(&mut moves, y, x, color_bit);
+                            } else if piece == PIECES[&'r'] {
+                                self.add_legal_moves_rq(&mut moves, y, x, color_bit);
+                            } else if piece == PIECES[&'q'] {
+                                self.add_legal_moves_bq(&mut moves, y, x, color_bit);
+                                self.add_legal_moves_rq(&mut moves, y, x, color_bit);
+                            }
+                        }
+                    }
+                }
+                // make search if in check for each move for every piece!
+                let mut i = 0;
+                let mut len = moves.len();
+                while (i < len) {
+                    self.makemove(moves[i]);
+                    // todo
+                    i++;
+                }
             }
             Check::NotInCheck => {
                 // scan for any moves
             },
             Check::InCheck => {
-                // scan for any moves carefully
-                for y in 0..7 {
-                    for x in 0..7 {
-                        if self.field[y][x] > 0 {
-                            let piece = self.field[y][x] - color_bit;
-                            if piece == PIECES[&'p'] {
-
-                            } else if piece == PIECES[&'k'] {
-
-                            } else if piece == PIECES[&'n'] {
-
-                            } else if piece == PIECES[&'b'] {
-                                // search diag
-                            } else if piece == PIECES[&'r'] {
-                                // search straight
-                            } else if piece == PIECES[&'q'] {
-                                // search diag & straight
-                            }
-                        }
-                    }
-                }
+                
             },
             Check::InDoubleCheck => {
                 // scan for only king moves
@@ -624,6 +704,7 @@ impl Board {
                 }
             }
         }
+        // this will generate not a pseudolegal move, maybe should be optimized and NOT check if king will be in check after castling
         let check: Check = check_status.unwrap_or(Check::Unknown);
         if check == Check::NotInCheck || check == Check::Unknown {
             if color_bit == 1 {
@@ -788,7 +869,6 @@ pub fn in_bound(y: u8, x: u8, y_sub: u8, x_sub: u8) -> bool {
 pub fn in_bound_single(val: u8, sub: u8) -> bool {
     !(val > 7 + sub || sub > val)
 }
-
 
 fn get_default_board() -> [[u8; 8]; 8] {
     let mut field = [[0; 8]; 8];
