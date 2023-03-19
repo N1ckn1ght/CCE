@@ -1,5 +1,5 @@
 #[derive(Clone)]
 pub struct Coord {
-    pub y: usize,
-    pub x: usize
+    pub y: u8,
+    pub x: u8
 }
