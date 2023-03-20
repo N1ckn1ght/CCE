@@ -1,46 +1,10 @@
+use crate::board::bimaps::Bimaps;
 use crate::board::coord::Coord;
 use crate::board::mov::Mov;
 use crate::board::mov::BMov;
-use phf::phf_map;
 use std::char;
 use std::cmp::{max, min};
 use std::vec::Vec;
-
-// full commentary in Board and Mov struct constructors
-// this needs to be bit-shifted in order to store in Mov
-// use (piece & 254) << 2
-pub static PIECES: phf::Map<char, u8> = phf_map! {
-    ' ' => 0,
-    'p' => 2,
-    'P' => 3,
-    'k' => 4,
-    'K' => 5,
-    'n' => 6,
-    'N' => 7,
-    'b' => 8,
-    'B' => 9,
-    'r' => 10,
-    'R' => 11,
-    'q' => 12,
-    'Q' => 13
-};
-
-// full commentary in Board struct constructor
-pub static CASTLES: phf::Map<char, u8> = phf_map! {
-    'K' => 128,
-    'Q' => 64,
-    'k' => 32,
-    'q' => 16
-};
-
-// full commentary in Mov struct constructor/
-// this ! IS ALREADY ! bit shifted in order to store in Mov
-pub static PROMOTION: phf::Map<char, u8> = phf_map! {
-    'q' => 6,
-    'n' => 4,
-    'r' => 2,
-    'b' => 0
-};
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum Check {
@@ -80,6 +44,8 @@ pub struct Board {
 }
 
 impl Board {
+    const B: Bimaps = Bimaps::init();
+
     pub fn new() -> Board {
         Board{
             field: get_default_board(),
@@ -96,7 +62,7 @@ impl Board {
 
     pub fn parse_fen(FEN: String) -> Board {
         let mut field: [[u8; 8]; 8] = [[0; 8]; 8];
-        let mut history: Vec<Mov> = Vec::new();
+        let mut history: Vec<BMov> = Vec::new();
         let mut white_to_move: bool = true;
         let mut en_passant: Coord = Coord{y: 8, x : 8};
         let mut castling: u8 = 0;
@@ -122,7 +88,7 @@ impl Board {
                         }
                         col = 0;
                     } else {
-                        field[row as usize][col as usize] = piece_to_value(c);
+                        field[row as usize][col as usize] = PIECES[&'c'];
 
                         // Addon
                         if c == 'k' {
@@ -187,6 +153,7 @@ impl Board {
     }
     
     // Careful: this function WILL MAKE A MOVE without additional checks on if it's a legal move or not!
+    // todo - promotion issue
     pub fn make_move(& self, mov: Mov) {
         let piece = self.field[mov.from.y as usize][mov.from.x as usize];
 
@@ -194,7 +161,7 @@ impl Board {
         self.history.push(BMov{mov, castling: self.castling, en_passant: self.en_passant});
         self.field[mov.to.y as usize][mov.to.x as usize] = self.field[mov.from.y as usize][mov.from.x as usize];
         self.field[mov.from.y as usize][mov.from.x as usize] = 0;
-        
+
         // update king locations + check for special cases (this one is castle)
         if piece == PIECES[&'k'] {
             self.black_king_location = Coord{y: mov.to.y, x: mov.to.x};
@@ -224,11 +191,19 @@ impl Board {
         } 
         // other special cases
         else if mov.data & 1 == 1 {
-            // en passant
+            // promotion or en passant
             if piece == PIECES[&'p'] {
-                self.field[self.en_passant.y as usize - 1][self.en_passant.x as usize] = 0;
+                if mov.to.y == 0 {
+                    self.field[mov.to.y][mov.to.x] = 
+                } else {
+                    self.field[self.en_passant.y as usize + 1][self.en_passant.x as usize] = 0;
+                }
             } else if piece == PIECES[&'P'] {
-                self.field[self.en_passant.y as usize + 1][self.en_passant.x as usize] = 0;
+                if mov.to.y == 7 {
+                    self.field[mov.to.y][mov.to.x] = mov.data & 6
+                } else {
+                    self.field[self.en_passant.y as usize - 1][self.en_passant.x as usize] = 0;
+                }
             }
         }
         // watchout for a rook move that will prevent future castling as well
@@ -251,8 +226,20 @@ impl Board {
         }
     }
 
-    pub fn revert_move(& self, mov: Mov) {
-        
+    pub fn revert_move(& self) {
+        let bmov: BMov = self.history.pop().unwrap();
+        let mov: &Mov = &bmov.mov;
+        let captured: 
+        self.field[mov.from.y as usize][mov.from.x as usize] = self.field[mov.to.y as usize][mov.to.x as usize];
+        self.field[mov.to.y as usize][mov.to.x as usize] = 0;
+        self.castling = bmov.castling;
+        self.en_passant = bmov.en_passant;
+
+        if mov.data & 1 == 1 {
+            
+        } else {
+
+        }
     }
 
     pub fn get_legal_moves(& self, check_status: Option<Check>) -> Vec<Mov> {
@@ -893,17 +880,4 @@ fn get_default_board() -> [[u8; 8]; 8] {
     field[7][6] = PIECES[&'n'];
     field[7][7] = PIECES[&'r'];
     field
-}
-
-fn piece_to_value(piece: char) -> u8 {
-    PIECES[&piece]
-}
-
-fn value_to_piece(value: u8) -> char {
-    for (key, value_) in &PIECES {
-        if value == *value_ {
-            return *key
-        }
-    }
-    panic!("No such piece with number: \"{}\"", value)
 }
