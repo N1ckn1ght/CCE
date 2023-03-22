@@ -13,6 +13,7 @@ pub fn main() {
 
     b.print();
     let mut moves: Vec<Mov> = b.get_legal_moves(None);
+    println!("Total moves: {}", moves.len());
     for i in 0..moves.len() {
         println!("{} {} -> {} {}", moves[i].from.y, moves[i].from.x, moves[i].to.y, moves[i].to.x);
     }

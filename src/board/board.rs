@@ -294,8 +294,8 @@ impl Board {
         match check {
             Check::Unknown | Check::InCheck => {
                 // scan for any pseudo-legal moves
-                for y in 0..7 {
-                    for x in 0..7 {
+                for y in 0..8 {
+                    for x in 0..8 {
                         if self.field[y as usize][x as usize] > 0 {
                             let piece = self.field[y as usize][x as usize] - color_bit;
                             if piece == self.gpl(&'p') {
@@ -333,8 +333,8 @@ impl Board {
             }
             Check::NotInCheck => {
                 // still scan for any pseudo-legal moves
-                for y in 0..7 {
-                    for x in 0..7 {
+                for y in 0..8 {
+                    for x in 0..8 {
                         if self.field[y as usize][x as usize] > 0 {
                             let piece = self.field[y as usize][x as usize] - color_bit;
                             if piece == self.gpl(&'p') {
@@ -855,35 +855,36 @@ impl Board {
                         vec.push(Mov{data: self.grl(&'b') + self.sav(piece), from: Coord{y, x}, to: Coord{y: 7, x: x + 1}});
                     }
                 }
-            }
-            // 1 move forward
-            // Note: this additional in_bound check might be useless (case: there is a pawn at y=8)
-            if Self::in_bound_single(y + 1, 0) {
-                if self.field[(y + 1) as usize][x as usize] == 0 {
-                    vec.push(Mov{data: 0, from: Coord {y, x}, to: Coord{y: y + 1, x}});
-                    // 2 moves forward
-                    if y == 1 && self.field[3][x as usize] == 0 {
-                        vec.push(Mov{data: 0, from: Coord {y, x}, to: Coord{y: 3, x}});
+            } else {
+                // 1 move forward
+                // Note: this additional in_bound check might be useless (case: there is a pawn at y=8)
+                if Self::in_bound_single(y + 1, 0) {
+                    if self.field[(y + 1) as usize][x as usize] == 0 {
+                        vec.push(Mov{data: 0, from: Coord {y, x}, to: Coord{y: y + 1, x}});
+                        // 2 moves forward
+                        if y == 1 && self.field[3][x as usize] == 0 {
+                            vec.push(Mov{data: 0, from: Coord {y, x}, to: Coord{y: 3, x}});
+                        }
+                    }
+                    // simple captures
+                    if Self::in_bound_single(x, 1) {
+                        piece = self.field[(y + 1) as usize][(x - 1) as usize];
+                        if piece > 0 && piece & 1 == 0 {
+                            vec.push(Mov{data: self.sav(piece), from: Coord{y, x}, to: Coord{y: y + 1, x: x - 1}});
+                        }
+                    }
+                    if Self::in_bound_single(x + 1, 0) {
+                        piece = self.field[(y + 1) as usize][(x + 1) as usize];
+                        if piece > 0 && piece & 1 == 0 {
+                            vec.push(Mov{data: self.sav(piece), from: Coord{y, x}, to: Coord{y: y + 1, x: x + 1}});
+                        }
                     }
                 }
-                // simple captures
-                if Self::in_bound_single(x, 1) {
-                    piece = self.field[(y + 1) as usize][(x - 1) as usize];
-                    if piece > 0 && piece & 1 == 0 {
-                        vec.push(Mov{data: self.sav(piece), from: Coord{y, x}, to: Coord{y: y + 1, x: x - 1}});
+                // en passant
+                if self.en_passant.y == 5 && y == 4 {
+                    if x + 1 == self.en_passant.x || x == self.en_passant.x + 1 {
+                        vec.push(Mov{data: self.gpls(&'p') + 1, from: Coord{y, x}, to: self.en_passant.clone()});
                     }
-                }
-                if Self::in_bound_single(x + 1, 0) {
-                    piece = self.field[(y + 1) as usize][(x + 1) as usize];
-                    if piece > 0 && piece & 1 == 0 {
-                        vec.push(Mov{data: self.sav(piece), from: Coord{y, x}, to: Coord{y: y + 1, x: x + 1}});
-                    }
-                }
-            }
-            // en passant
-            if self.en_passant.y == 5 && y == 4 {
-                if x + 1 == self.en_passant.x || x == self.en_passant.x + 1 {
-                    vec.push(Mov{data: self.gpls(&'p') + 1, from: Coord{y, x}, to: self.en_passant.clone()});
                 }
             }
         } else {
@@ -914,35 +915,36 @@ impl Board {
                         vec.push(Mov{data: self.grl(&'b') + self.sav(piece), from: Coord{y, x}, to: Coord{y: 0, x: x + 1}});
                     }
                 }
-            }
-            // 1 move forward
-            // Note: this additional in_bound check might be useless (case: there is a pawn at y=8)
-            if Self::in_bound_single(y, 1) {
-                if self.field[(y - 1) as usize][x as usize] == 0 {
-                    vec.push(Mov{data: 0, from: Coord {y, x}, to: Coord{y: y - 1, x}});
-                    // 2 moves forward
-                    if y == 6 && self.field[4][x as usize] == 0 {
-                        vec.push(Mov{data: 0, from: Coord {y, x}, to: Coord{y: 4, x}});
+            } else {
+                // 1 move forward
+                // Note: this additional in_bound check might be useless (case: there is a pawn at y=8)
+                if Self::in_bound_single(y, 1) {
+                    if self.field[(y - 1) as usize][x as usize] == 0 {
+                        vec.push(Mov{data: 0, from: Coord {y, x}, to: Coord{y: y - 1, x}});
+                        // 2 moves forward
+                        if y == 6 && self.field[4][x as usize] == 0 {
+                            vec.push(Mov{data: 0, from: Coord {y, x}, to: Coord{y: 4, x}});
+                        }
+                    }
+                    // simple captures
+                    if Self::in_bound_single(x, 1) {
+                        piece = self.field[(y - 1) as usize][(x - 1) as usize];
+                        if piece > 0 && piece & 1 == 1 {
+                            vec.push(Mov{data: self.sav(piece), from: Coord{y, x}, to: Coord{y: y - 1, x: x - 1}});
+                        }
+                    }
+                    if Self::in_bound_single(x + 1, 0) {
+                        piece = self.field[(y - 1) as usize][(x + 1) as usize];
+                        if piece > 0 && piece & 1 == 1 {
+                            vec.push(Mov{data: self.sav(piece), from: Coord{y, x}, to: Coord{y: y - 1, x: x + 1}});
+                        }
                     }
                 }
-                // simple captures
-                if Self::in_bound_single(x, 1) {
-                    piece = self.field[(y - 1) as usize][(x - 1) as usize];
-                    if piece > 0 && piece & 1 == 1 {
-                        vec.push(Mov{data: self.sav(piece), from: Coord{y, x}, to: Coord{y: y - 1, x: x - 1}});
+                // en passant
+                if self.en_passant.y == 2 && y == 3 {
+                    if x + 1 == self.en_passant.x || x == self.en_passant.x + 1 {
+                        vec.push(Mov{data: self.gpls(&'p') + 1, from: Coord{y, x}, to: self.en_passant.clone()});
                     }
-                }
-                if Self::in_bound_single(x + 1, 0) {
-                    piece = self.field[(y - 1) as usize][(x + 1) as usize];
-                    if piece > 0 && piece & 1 == 1 {
-                        vec.push(Mov{data: self.sav(piece), from: Coord{y, x}, to: Coord{y: y - 1, x: x + 1}});
-                    }
-                }
-            }
-            // en passant
-            if self.en_passant.y == 2 && y == 3 {
-                if x + 1 == self.en_passant.x || x == self.en_passant.x + 1 {
-                    vec.push(Mov{data: self.gpls(&'p') + 1, from: Coord{y, x}, to: self.en_passant.clone()});
                 }
             }
         }
@@ -1001,7 +1003,7 @@ impl Board {
     
     fn get_default_board(bimaps: &Bimaps) -> [[u8; 8]; 8] {
         let mut field = [[0; 8]; 8];
-        for i in 0..7 {
+        for i in 0..8 {
             field[1][i] = bimaps.pieces.get_by_left(&'P').unwrap().clone();
             field[6][i] = bimaps.pieces.get_by_left(&'p').unwrap().clone();
         }
