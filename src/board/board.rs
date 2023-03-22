@@ -156,7 +156,6 @@ impl Board {
     }
     
     // Careful: this function WILL MAKE A MOVE without additional checks on if it's a legal move or not!
-    // todo - promotion issue
     pub fn make_move(&mut self, mov: Mov) {
         let piece = self.field[mov.from.y as usize][mov.from.x as usize];
 
