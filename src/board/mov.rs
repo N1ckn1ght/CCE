@@ -15,11 +15,12 @@ pub struct Mov {
     pub to: Coord
 }
 
-// the problem is: more additional info still needs to be stored in case of reverting a move!..
+// the problem is: more additional info still needs to be stored in case of a move takeback!..
 // it'd be also a bad idea to mash that info into data for a sort
 #[derive(Clone)]
 pub struct BMov {
     pub mov: Mov,
     pub castling: u8,
-    pub en_passant: Coord
+    pub en_passant: Coord,
+    pub hmw: u8
 }

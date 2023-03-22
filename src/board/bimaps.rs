@@ -2,16 +2,30 @@ use bimap::BiMap;
 use std::char;
 
 pub struct Bimaps {
-    pub pieces: Bimap,
-    pub castles: Bimap,
-    pub promotions: Bimap
+    pub pieces: BiMap::<char, u8>,
+    pub castles: BiMap::<char, u8>,
+    pub promotions: BiMap::<char, u8>,
+    
+    pub shift_piece: u8,
+    pub shift_promotion: u8,
+    pub mask_piece: u8,
+    pub mask_promotion: u8
 }
 
 impl Bimaps {
     pub fn init() -> Bimaps {
-        let mut pieces = Bimap::<char, u8>::new();
-        let mut castles = Bimap::<char, u8>::new();
-        let mut promotions = Bimap::<char, u8>::new();
+        let mut pieces = BiMap::<char, u8>::new();
+        let mut castles = BiMap::<char, u8>::new();
+        let mut promotions = BiMap::<char, u8>::new();
+
+        // bit shift to save a piece value
+        let shift_piece: u8 = 2;
+        // bit shift to save a promotion avlue
+        let shift_promotion: u8 = 1;
+        // bit mask to extract a (shifted) piece value
+        let mask_piece: u8 = 14;
+        // bit mask to extract a (shifted) promotion value
+        let mask_promotion: u8 = 3;
 
         pieces.insert(' ', 0);
         pieces.insert('p', 2);
@@ -28,15 +42,15 @@ impl Bimaps {
         pieces.insert('Q', 13);
 
         castles.insert('q', 16);
-        casltes.insert('k', 32);
+        castles.insert('k', 32);
         castles.insert('Q', 64);
-        casltes.insert('K', 128);
+        castles.insert('K', 128);
 
         promotions.insert('b', 0);
         promotions.insert('r', 2);
         promotions.insert('n', 4);
         promotions.insert('q', 6);
 
-        Bimaps{pieces, castles, promotions}
+        Bimaps{pieces, castles, promotions, shift_piece, shift_promotion, mask_piece, mask_promotion}
     }
 }

@@ -17,14 +17,12 @@ pub enum Check {
 
 #[derive(Clone)]
 pub struct Board {
-    // FEN information
-
     // 12 - queen, 10 - rook, 8 - bishop, 6 - knight, 4 - king, 2 - pawn
     // +1 if it's a white piece
     // this choice is for better synergy with mov structure
     // white will have their pieces on 0, 1 horizontals, black on 6, 7
     pub field: [[u8; 8]; 8],
-    // move storage for a takeback function
+    // move storage for a takeback (revert) function
     history: Vec<BMov>,
     // 1 - white to move, 0 - black to move 
     white_to_move: bool,
@@ -44,6 +42,7 @@ pub struct Board {
 }
 
 impl Board {
+    // constants to work with pieces and moves
     const B: Bimaps = Bimaps::init();
 
     pub fn new() -> Board {
@@ -88,7 +87,7 @@ impl Board {
                         }
                         col = 0;
                     } else {
-                        field[row as usize][col as usize] = PIECES[&'c'];
+                        field[row as usize][col as usize] = Board::gpl(&c);
 
                         // Addon
                         if c == 'k' {
@@ -158,12 +157,15 @@ impl Board {
         let piece = self.field[mov.from.y as usize][mov.from.x as usize];
 
         // make a move
-        self.history.push(BMov{mov, castling: self.castling, en_passant: self.en_passant});
+        self.history.push(BMov{mov, castling: self.castling, en_passant: self.en_passant, hmw: self.hmw});
         self.field[mov.to.y as usize][mov.to.x as usize] = self.field[mov.from.y as usize][mov.from.x as usize];
         self.field[mov.from.y as usize][mov.from.x as usize] = 0;
 
+        // assuming this move is not capture or a pawn move
+        self.hmw += 1;
+
         // update king locations + check for special cases (this one is castle)
-        if piece == PIECES[&'k'] {
+        if piece == Board::gpl(&'k') {
             self.black_king_location = Coord{y: mov.to.y, x: mov.to.x};
             self.castling &= 192;
             if mov.data & 1 == 1 {
@@ -176,7 +178,7 @@ impl Board {
                     self.field[7][0] = 0;
                 }
             }
-        } else if piece == PIECES[&'K'] {
+        } else if piece == Board::gpl(&'K') {
             self.white_king_location = Coord{y: mov.to.y, x: mov.to.x};
             self.castling &= 48;
             if mov.data & 1 == 1 {
@@ -192,22 +194,25 @@ impl Board {
         // other special cases
         else if mov.data & 1 == 1 {
             // promotion or en passant
-            if piece == PIECES[&'p'] {
+            if piece == Board::gpl(&'p') {
+                // pawn's move (or capture) - drop hmw
+                self.hmw = 0;
                 if mov.to.y == 0 {
-                    self.field[mov.to.y][mov.to.x] = 
+                    self.field[mov.to.y as usize][mov.to.x as usize] = Board::rtp(mov.data);
                 } else {
                     self.field[self.en_passant.y as usize + 1][self.en_passant.x as usize] = 0;
                 }
-            } else if piece == PIECES[&'P'] {
+            } else { // if piece == Board::gpl(&'P')
+                self.hmw = 0;
                 if mov.to.y == 7 {
-                    self.field[mov.to.y][mov.to.x] = mov.data & 6
+                    self.field[mov.to.y as usize][mov.to.x as usize] = Board::rtp(mov.data); 
                 } else {
                     self.field[self.en_passant.y as usize - 1][self.en_passant.x as usize] = 0;
                 }
             }
         }
         // watchout for a rook move that will prevent future castling as well
-        else if piece == PIECES[&'r'] {
+        else if piece == Board::gpl(&'r') {
             if mov.from.y == 7 {
                 if mov.from.x == 0 {
                     self.castling &= 16;
@@ -215,7 +220,7 @@ impl Board {
                     self.castling &= 32;
                 }
             }
-        } else if piece == PIECES[&'R'] {
+        } else if piece == Board::gpl(&'R') {
             if mov.from.y == 0 {
                 if mov.from.x == 0 {
                     self.castling &= 64;
@@ -224,22 +229,59 @@ impl Board {
                 }
             }
         }
+
+        // update/drop counters and next side to move
+        if Board::ptp(mov.data) > 0 {
+            self.hmw = 0;
+        }
+        self.white_to_move = !self.white_to_move;
+        self.no = self.no + self.white_to_move as u16;
     }
 
     pub fn revert_move(& self) {
         let bmov: BMov = self.history.pop().unwrap();
         let mov: &Mov = &bmov.mov;
-        let captured: 
-        self.field[mov.from.y as usize][mov.from.x as usize] = self.field[mov.to.y as usize][mov.to.x as usize];
-        self.field[mov.to.y as usize][mov.to.x as usize] = 0;
+        let piece: u8 = self.field[mov.to.y as usize][mov.to.x as usize];
+        self.field[mov.from.y as usize][mov.from.x as usize] = piece;
+        self.field[mov.to.y as usize][mov.to.x as usize] = Board::ptp(mov.data);
         self.castling = bmov.castling;
         self.en_passant = bmov.en_passant;
+        self.hmw = bmov.hmw;
 
-        if mov.data & 1 == 1 {
-            
-        } else {
-
+        // reverse castling, revert kings locations
+        if piece == Board::gpl(&'k') {
+            self.black_king_location = Coord{y: mov.from.y, x: mov.from.x};
+            if mov.to.x == 6 {
+                self.field[7][7] = self.field[7][5];
+                self.field[7][5] = 0;
+            } else {
+                self.field[7][0] = self.field[7][3];
+                self.field[7][3] = 0;
+            }
+        } else if piece == Board::gpl(&'K') {
+            self.white_king_location = Coord{y: mov.from.y, x: mov.from.x};
+            if mov.data & 1 == 1 {
+                if mov.to.x == 6 {
+                    self.field[0][7] = self.field[0][5];
+                    self.field[0][5] = 0;
+                } else {
+                    self.field[0][0] = self.field[0][3];
+                    self.field[0][3] = 0;
+                }
+            }
+        } else if mov.data & 1 == 1 {
+            if piece - self.white_to_move as u8 == Board::gpl(&'p') {
+                // now it's still other side to move, not takebacken one!
+                self.field[(mov.to.y - 1 + (self.white_to_move as u8) * 2) as usize][mov.to.x as usize] = Board::gpl(&'p') + self.white_to_move as u8;
+                // remove duplicated pawn?
+                self.field[mov.to.y as usize][mov.to.x as usize] = 0;
+            } else {
+                self.field[mov.from.y as usize][mov.from.x as usize] = Board::gpl(&'p') + !self.white_to_move as u8;
+            }
         }
+
+        self.no = self.no - self.white_to_move as u16;
+        self.white_to_move = !self.white_to_move;
     }
 
     pub fn get_legal_moves(& self, check_status: Option<Check>) -> Vec<Mov> {
@@ -253,17 +295,17 @@ impl Board {
                     for x in 0..7 {
                         if self.field[y as usize][x as usize] > 0 {
                             let piece = self.field[y as usize][x as usize] - color_bit;
-                            if piece == PIECES[&'p'] {
+                            if piece == Board::gpl(&'p') {
                                 self.add_legal_moves_p(&mut moves, y, x, color_bit);
-                            } else if piece == PIECES[&'k'] {
+                            } else if piece == Board::gpl(&'k') {
                                 self.add_legal_moves_k(&mut moves, y, x, color_bit, check_status);
-                            } else if piece == PIECES[&'n'] {
+                            } else if piece == Board::gpl(&'n') {
                                 self.add_legal_moves_n(&mut moves, y, x, color_bit);
-                            } else if piece == PIECES[&'b'] {
+                            } else if piece == Board::gpl(&'b') {
                                 self.add_legal_moves_bq(&mut moves, y, x, color_bit);
-                            } else if piece == PIECES[&'r'] {
+                            } else if piece == Board::gpl(&'r') {
                                 self.add_legal_moves_rq(&mut moves, y, x, color_bit);
-                            } else if piece == PIECES[&'q'] {
+                            } else if piece == Board::gpl(&'q') {
                                 self.add_legal_moves_bq(&mut moves, y, x, color_bit);
                                 self.add_legal_moves_rq(&mut moves, y, x, color_bit);
                             }
@@ -276,7 +318,7 @@ impl Board {
                 while (i < len) {
                     self.makemove(moves[i]);
                     // todo
-                    i++;
+                    i += 1;
                 }
             }
             Check::NotInCheck => {
@@ -331,16 +373,16 @@ impl Board {
     // check if opponent's knight is attacking this cell
     fn is_under_attack_n(& self, y: u8, x: u8, color_bit: u8) -> bool {
         for i in 1..2 {
-            if in_bound(y + 3, x + i, i, 0) && self.field[(y + 3 - i) as usize][(x + i)  as usize] == PIECES[&'n'] + color_bit {
+            if in_bound(y + 3, x + i, i, 0) && self.field[(y + 3 - i) as usize][(x + i)  as usize] == Board::gpl(&'b') + color_bit {
                 return true;
             }
-            if in_bound(y, x + 3, i, i) && self.field[(y - i) as usize][(x + 3 - i) as usize] == PIECES[&'n'] + color_bit {
+            if in_bound(y, x + 3, i, i) && self.field[(y - i) as usize][(x + 3 - i) as usize] == Board::gpl(&'n') + color_bit {
                 return true;
             }
-            if in_bound(y + i, x, 3, i) && self.field[(y + i - 3) as usize][(x - i) as usize] == PIECES[&'n'] + color_bit {
+            if in_bound(y + i, x, 3, i) && self.field[(y + i - 3) as usize][(x - i) as usize] == Board::gpl(&'n') + color_bit {
                 return true;
             }
-            if in_bound(y + i, x + i, 0, 3) && self.field[(y + i) as usize][(x + i - 3) as usize] == PIECES[&'n'] + color_bit {
+            if in_bound(y + i, x + i, 0, 3) && self.field[(y + i) as usize][(x + i - 3) as usize] == Board::gpl(&'n') + color_bit {
                 return true;
             }
         }
@@ -359,7 +401,7 @@ impl Board {
             } else {
                 continue;
             }
-            if piece == PIECES[&'b'] || piece == PIECES[&'q'] {
+            if piece == Board::gpl(&'b') || piece == Board::gpl(&'q') {
                 return true;
             } else {
                 break;
@@ -374,7 +416,7 @@ impl Board {
             } else {
                 continue;
             }
-            if piece == PIECES[&'b'] || piece == PIECES[&'q'] {
+            if piece == Board::gpl(&'b') || piece == Board::gpl(&'q') {
                 return true;
             } else {
                 break;
@@ -389,7 +431,7 @@ impl Board {
             } else {
                 continue;
             }
-            if piece == PIECES[&'b'] || piece == PIECES[&'q'] {
+            if piece == Board::gpl(&'b') || piece == Board::gpl(&'q') {
                 return true;
             } else {
                 break;
@@ -404,7 +446,7 @@ impl Board {
             } else {
                 continue;
             }
-            if piece == PIECES[&'b'] || piece == PIECES[&'q'] {
+            if piece == Board::gpl(&'b') || piece == Board::gpl(&'q') {
                 return true;
             } else {
                 break;
@@ -425,7 +467,7 @@ impl Board {
             } else {
                 continue;
             }
-            if piece == PIECES[&'r'] || piece == PIECES[&'q'] {
+            if piece == Board::gpl(&'r') || piece == Board::gpl(&'q') {
                 return true;
             } else {
                 break;
@@ -440,7 +482,7 @@ impl Board {
             } else {
                 continue;
             }
-            if piece == PIECES[&'r'] || piece == PIECES[&'q'] {
+            if piece == Board::gpl(&'r') || piece == Board::gpl(&'q') {
                 return true;
             } else {
                 break;
@@ -455,7 +497,7 @@ impl Board {
             } else {
                 continue;
             }
-            if piece == PIECES[&'r'] || piece == PIECES[&'q'] {
+            if piece == Board::gpl(&'r') || piece == Board::gpl(&'q') {
                 return true;
             } else {
                 break;
@@ -470,7 +512,7 @@ impl Board {
             } else {
                 continue;
             }
-            if piece == PIECES[&'r'] || piece == PIECES[&'q'] {
+            if piece == Board::gpl(&'r') || piece == Board::gpl(&'q') {
                 return true;
             } else {
                 break;
@@ -496,17 +538,17 @@ impl Board {
     // check if opponent's pawn is attacking this cell
     fn is_under_attack_p(& self, y: u8, x: u8, color_of_attacker: bool) -> bool {
         if color_of_attacker {
-            if in_bound(y + 1, x + 1, 0, 0) && self.field[(y + 1) as usize][(x + 1) as usize] == PIECES[&'P'] {
+            if in_bound(y + 1, x + 1, 0, 0) && self.field[(y + 1) as usize][(x + 1) as usize] == Board::gpl(&'P') {
                 return true;
             }
-            if in_bound(y + 1, x, 0, 1) && self.field[(y + 1) as usize][(x - 1) as usize] == PIECES[&'P'] {
+            if in_bound(y + 1, x, 0, 1) && self.field[(y + 1) as usize][(x - 1) as usize] == Board::gpl(&'P') {
                 return true;
             }
         } else {
-            if in_bound(y, x + 1, 1, 0) && self.field[(y - 1) as usize][(x + 1) as usize] == PIECES[&'p'] {
+            if in_bound(y, x + 1, 1, 0) && self.field[(y - 1) as usize][(x + 1) as usize] == Board::gpl(&'p') {
                 return true;
             }
-            if in_bound(y, x, 1, 1) && self.field[(y - 1) as usize][(x - 1) as usize] == PIECES[&'p'] {
+            if in_bound(y, x, 1, 1) && self.field[(y - 1) as usize][(x - 1) as usize] == Board::gpl(&'p') {
                 return true;
             }
         }
@@ -525,7 +567,7 @@ impl Board {
                 if piece == 0 {
                     vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
                 } else if piece & 1 != color_bit {
-                    vec.push(Mov{data: (piece & 254) << 2 , from: Coord{y, x}, to: coord});
+                    vec.push(Mov{data: Board::sav(piece) , from: Coord{y, x}, to: coord});
                 }
             }
             if in_bound(y, x + 3, i, i) {
@@ -534,7 +576,7 @@ impl Board {
                 if piece == 0 {
                     vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
                 } else if piece & 1 != color_bit {
-                    vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: coord});
+                    vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: coord});
                 }
             }
             if in_bound(y + i, x, 3, i) {
@@ -543,7 +585,7 @@ impl Board {
                 if piece == 0 {
                     vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
                 } else if piece & 1 != color_bit {
-                    vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: coord});
+                    vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: coord});
                 }
             }
             if in_bound(y + i, x + i, 0, 3) {
@@ -552,7 +594,7 @@ impl Board {
                 if piece == 0 {
                     vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
                 } else if piece & 1 != color_bit {
-                    vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: coord});
+                    vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: coord});
                 }
             }
         }
@@ -570,7 +612,7 @@ impl Board {
             if piece == 0 {
                 vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
             } else if piece & 1 != color_bit {
-                vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: coord});
+                vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: coord});
             } else {
                 break;
             }
@@ -583,7 +625,7 @@ impl Board {
             if piece == 0 {
                 vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
             } else if piece & 1 != color_bit {
-                vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: coord});
+                vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: coord});
             } else {
                 break;
             }
@@ -596,7 +638,7 @@ impl Board {
             if piece == 0 {
                 vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
             } else if piece & 1 != color_bit {
-                vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: coord});
+                vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: coord});
             } else {
                 break;
             }
@@ -609,7 +651,7 @@ impl Board {
             if piece == 0 {
                 vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
             } else if piece & 1 != color_bit {
-                vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: coord});
+                vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: coord});
             } else {
                 break;
             }
@@ -628,7 +670,7 @@ impl Board {
             if piece == 0 {
                 vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
             } else if piece & 1 != color_bit {
-                vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: coord});
+                vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: coord});
             } else {
                 break;
             }
@@ -641,7 +683,7 @@ impl Board {
             if piece == 0 {
                 vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
             } else if piece & 1 != color_bit {
-                vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: coord});
+                vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: coord});
             } else {
                 break;
             }
@@ -654,7 +696,7 @@ impl Board {
             if piece == 0 {
                 vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
             } else if piece & 1 != color_bit {
-                vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: coord});
+                vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: coord});
             } else {
                 break;
             }
@@ -667,7 +709,7 @@ impl Board {
             if piece == 0 {
                 vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
             } else if piece & 1 != color_bit {
-                vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: coord});
+                vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: coord});
             } else {
                 break;
             }
@@ -686,7 +728,7 @@ impl Board {
                     if piece == 0 {
                         vec.push(Mov{data: 0, from: Coord{y, x}, to: coord});
                     } else if piece & 1 != color_bit {
-                        vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: coord});
+                        vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: coord});
                     }
                 }
             }
@@ -695,14 +737,14 @@ impl Board {
         let check: Check = check_status.unwrap_or(Check::Unknown);
         if check == Check::NotInCheck || check == Check::Unknown {
             if color_bit == 1 {
-                if self.castling & CASTLES[&'K'] > 0 && self.field[0][5] == 0 && self.field[0][6] == 0 {
+                if self.castling & Board::gcl(&'K') > 0 && self.field[0][5] == 0 && self.field[0][6] == 0 {
                     if !(self.is_under_attack(0, 5, false, [true; 5]) || self.is_under_attack(0, 6, false, [true; 5])) {
                         if check == Check::NotInCheck || !self.is_under_attack(0, 4, false, [true, true, true, false, true]) {
                             vec.push(Mov{data: 1, from: Coord{y: 0, x: 4}, to: Coord{y: 0, x: 6}});
                         }
                     }
                 }
-                if self.castling & CASTLES[&'Q'] > 0 && self.field[0][3] == 0 && self.field[0][2] == 0 && self.field[0][1] == 0 {
+                if self.castling & Board::gcl(&'Q') > 0 && self.field[0][3] == 0 && self.field[0][2] == 0 && self.field[0][1] == 0 {
                     if !(self.is_under_attack(0, 3, false, [true; 5]) || self.is_under_attack(0, 2, false, [true; 5])) {
                         if check == Check::NotInCheck || !self.is_under_attack(0, 4, false, [true, true, true, false, true]) {
                             vec.push(Mov{data: 1, from: Coord{y: 0, x: 4}, to: Coord{y: 0, x: 2}});
@@ -710,12 +752,12 @@ impl Board {
                     }
                 }
             } else {
-                if self.castling & CASTLES[&'k'] > 0 && self.field[7][5] == 0 && self.field[7][6] == 0 {
+                if self.castling & Board::gcl(&'k') > 0 && self.field[7][5] == 0 && self.field[7][6] == 0 {
                     if check == Check::NotInCheck || !self.is_under_attack(7, 4, false, [true, true, true, false, true]) {
                         vec.push(Mov{data: 1, from: Coord{y: 7, x: 4}, to: Coord{y: 7, x: 6}});
                     }
                 }
-                if self.castling & CASTLES[&'q'] > 0 && self.field[7][3] == 0 && self.field[7][2] == 0 && self.field[7][1] == 0 {
+                if self.castling & Board::gcl(&'q') > 0 && self.field[7][3] == 0 && self.field[7][2] == 0 && self.field[7][1] == 0 {
                     if check == Check::NotInCheck || !self.is_under_attack(7, 4, false, [true, true, true, false, true]) {
                         vec.push(Mov{data: 1, from: Coord{y: 7, x: 4}, to: Coord{y: 7, x: 2}});
                     }
@@ -731,27 +773,27 @@ impl Board {
             // promotion, promotion x capture
             if y == 6 {
                 if self.field[7][x as usize] == 0 {
-                    vec.push(Mov{data: PROMOTION[&'q'], from: Coord{y, x}, to: Coord{y: 7, x}});
-                    vec.push(Mov{data: PROMOTION[&'n'], from: Coord{y, x}, to: Coord{y: 7, x}});
-                    vec.push(Mov{data: PROMOTION[&'r'], from: Coord{y, x}, to: Coord{y: 7, x}});
-                    vec.push(Mov{data: PROMOTION[&'b'], from: Coord{y, x}, to: Coord{y: 7, x}});
+                    vec.push(Mov{data: Board::grl(&'q'), from: Coord{y, x}, to: Coord{y: 7, x}});
+                    vec.push(Mov{data: Board::grl(&'n'), from: Coord{y, x}, to: Coord{y: 7, x}});
+                    vec.push(Mov{data: Board::grl(&'r'), from: Coord{y, x}, to: Coord{y: 7, x}});
+                    vec.push(Mov{data: Board::grl(&'b'), from: Coord{y, x}, to: Coord{y: 7, x}});
                 }
                 if in_bound_single(x, 1) {
                     piece = self.field[7][(x - 1) as usize];
                     if piece > 0 && piece & 1 == 0 {
-                        vec.push(Mov{data: PROMOTION[&'q'] + piece << 2, from: Coord{y, x}, to: Coord{y: 7, x: x - 1}});
-                        vec.push(Mov{data: PROMOTION[&'n'] + piece << 2, from: Coord{y, x}, to: Coord{y: 7, x: x - 1}});
-                        vec.push(Mov{data: PROMOTION[&'r'] + piece << 2, from: Coord{y, x}, to: Coord{y: 7, x: x - 1}});
-                        vec.push(Mov{data: PROMOTION[&'b'] + piece << 2, from: Coord{y, x}, to: Coord{y: 7, x: x - 1}});
+                        vec.push(Mov{data: Board::grl(&'q') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 7, x: x - 1}});
+                        vec.push(Mov{data: Board::grl(&'n') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 7, x: x - 1}});
+                        vec.push(Mov{data: Board::grl(&'r') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 7, x: x - 1}});
+                        vec.push(Mov{data: Board::grl(&'b') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 7, x: x - 1}});
                     }
                 }
                 if in_bound_single(x + 1, 0) {
                     piece = self.field[7][(x + 1) as usize];
                     if piece > 0 && piece & 1 == 0 {
-                        vec.push(Mov{data: PROMOTION[&'q'] + piece << 2, from: Coord{y, x}, to: Coord{y: 7, x: x + 1}});
-                        vec.push(Mov{data: PROMOTION[&'n'] + piece << 2, from: Coord{y, x}, to: Coord{y: 7, x: x + 1}});
-                        vec.push(Mov{data: PROMOTION[&'r'] + piece << 2, from: Coord{y, x}, to: Coord{y: 7, x: x + 1}});
-                        vec.push(Mov{data: PROMOTION[&'b'] + piece << 2, from: Coord{y, x}, to: Coord{y: 7, x: x + 1}});
+                        vec.push(Mov{data: Board::grl(&'q') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 7, x: x + 1}});
+                        vec.push(Mov{data: Board::grl(&'n') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 7, x: x + 1}});
+                        vec.push(Mov{data: Board::grl(&'r') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 7, x: x + 1}});
+                        vec.push(Mov{data: Board::grl(&'b') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 7, x: x + 1}});
                     }
                 }
             }
@@ -769,20 +811,20 @@ impl Board {
                 if in_bound_single(x, 1) {
                     piece = self.field[(y + 1) as usize][(x - 1) as usize];
                     if piece > 0 && piece & 1 == 0 {
-                        vec.push(Mov{data: piece << 2, from: Coord{y, x}, to: Coord{y: y + 1, x: x - 1}});
+                        vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: Coord{y: y + 1, x: x - 1}});
                     }
                 }
                 if in_bound_single(x + 1, 0) {
                     piece = self.field[(y + 1) as usize][(x + 1) as usize];
                     if piece > 0 && piece & 1 == 0 {
-                        vec.push(Mov{data: piece << 2, from: Coord{y, x}, to: Coord{y: y + 1, x: x + 1}});
+                        vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: Coord{y: y + 1, x: x + 1}});
                     }
                 }
             }
             // en passant
             if self.en_passant.y == 5 && y == 4 {
                 if x + 1 == self.en_passant.x || x == self.en_passant.x + 1 {
-                    vec.push(Mov{data: (PIECES[&'p'] << 2) + 1, from: Coord{y, x}, to: self.en_passant.clone()});
+                    vec.push(Mov{data: Board::gpls(&'p') + 1, from: Coord{y, x}, to: self.en_passant.clone()});
                 }
             }
         } else {
@@ -790,27 +832,27 @@ impl Board {
             // promotion, promotion x capture
             if y == 1 {
                 if self.field[0][x as usize] == 0 {
-                    vec.push(Mov{data: PROMOTION[&'q'], from: Coord{y, x}, to: Coord{y: 0, x}});
-                    vec.push(Mov{data: PROMOTION[&'n'], from: Coord{y, x}, to: Coord{y: 0, x}});
-                    vec.push(Mov{data: PROMOTION[&'r'], from: Coord{y, x}, to: Coord{y: 0, x}});
-                    vec.push(Mov{data: PROMOTION[&'b'], from: Coord{y, x}, to: Coord{y: 0, x}});
+                    vec.push(Mov{data: Board::grl(&'q'), from: Coord{y, x}, to: Coord{y: 0, x}});
+                    vec.push(Mov{data: Board::grl(&'n'), from: Coord{y, x}, to: Coord{y: 0, x}});
+                    vec.push(Mov{data: Board::grl(&'r'), from: Coord{y, x}, to: Coord{y: 0, x}});
+                    vec.push(Mov{data: Board::grl(&'b'), from: Coord{y, x}, to: Coord{y: 0, x}});
                 }
                 if in_bound_single(x, 1) {
                     piece = self.field[0][(x - 1) as usize];
                     if piece > 0 && piece & 1 == 1 {
-                        vec.push(Mov{data: PROMOTION[&'q'] + (piece & 254) << 2, from: Coord{y, x}, to: Coord{y: 0, x: x - 1}});
-                        vec.push(Mov{data: PROMOTION[&'n'] + (piece & 254) << 2, from: Coord{y, x}, to: Coord{y: 0, x: x - 1}});
-                        vec.push(Mov{data: PROMOTION[&'r'] + (piece & 254) << 2, from: Coord{y, x}, to: Coord{y: 0, x: x - 1}});
-                        vec.push(Mov{data: PROMOTION[&'b'] + (piece & 254) << 2, from: Coord{y, x}, to: Coord{y: 0, x: x - 1}});
+                        vec.push(Mov{data: Board::grl(&'q') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 0, x: x - 1}});
+                        vec.push(Mov{data: Board::grl(&'n') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 0, x: x - 1}});
+                        vec.push(Mov{data: Board::grl(&'r') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 0, x: x - 1}});
+                        vec.push(Mov{data: Board::grl(&'b') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 0, x: x - 1}});
                     }
                 }
                 if in_bound_single(x + 1, 0) {
                     piece = self.field[0][(x + 1) as usize];
                     if piece > 0 && piece & 1 == 1 {
-                        vec.push(Mov{data: PROMOTION[&'q'] + (piece & 254) << 2, from: Coord{y, x}, to: Coord{y: 0, x: x + 1}});
-                        vec.push(Mov{data: PROMOTION[&'n'] + (piece & 254) << 2, from: Coord{y, x}, to: Coord{y: 0, x: x + 1}});
-                        vec.push(Mov{data: PROMOTION[&'r'] + (piece & 254) << 2, from: Coord{y, x}, to: Coord{y: 0, x: x + 1}});
-                        vec.push(Mov{data: PROMOTION[&'b'] + (piece & 254) << 2, from: Coord{y, x}, to: Coord{y: 0, x: x + 1}});
+                        vec.push(Mov{data: Board::grl(&'q') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 0, x: x + 1}});
+                        vec.push(Mov{data: Board::grl(&'n') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 0, x: x + 1}});
+                        vec.push(Mov{data: Board::grl(&'r') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 0, x: x + 1}});
+                        vec.push(Mov{data: Board::grl(&'b') + Board::sav(piece), from: Coord{y, x}, to: Coord{y: 0, x: x + 1}});
                     }
                 }
             }
@@ -828,23 +870,66 @@ impl Board {
                 if in_bound_single(x, 1) {
                     piece = self.field[(y - 1) as usize][(x - 1) as usize];
                     if piece > 0 && piece & 1 == 1 {
-                        vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: Coord{y: y - 1, x: x - 1}});
+                        vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: Coord{y: y - 1, x: x - 1}});
                     }
                 }
                 if in_bound_single(x + 1, 0) {
                     piece = self.field[(y - 1) as usize][(x + 1) as usize];
                     if piece > 0 && piece & 1 == 1 {
-                        vec.push(Mov{data: (piece & 254) << 2, from: Coord{y, x}, to: Coord{y: y - 1, x: x + 1}});
+                        vec.push(Mov{data: Board::sav(piece), from: Coord{y, x}, to: Coord{y: y - 1, x: x + 1}});
                     }
                 }
             }
             // en passant
             if self.en_passant.y == 2 && y == 3 {
                 if x + 1 == self.en_passant.x || x == self.en_passant.x + 1 {
-                    vec.push(Mov{data: (PIECES[&'p'] << 2) + 1, from: Coord{y, x}, to: self.en_passant.clone()});
+                    vec.push(Mov{data: Board::gpls(&'p') + 1, from: Coord{y, x}, to: self.en_passant.clone()});
                 }
             }
         }
+    }
+
+    // functions to simplify work with bimaps
+
+    // pieces by left'n'right values
+    pub fn gpl(piece: &char) -> u8 {
+        Board::B.pieces.get_by_left(piece).unwrap().clone()
+    }
+    pub fn gpr(value: &u8) -> char {
+        Board::B.pieces.get_by_right(value).unwrap().clone()
+    }
+    // castles by left'n'right values
+    pub fn gcl(castle: &char) -> u8 {
+        Board::B.castles.get_by_left(castle).unwrap().clone()
+    }
+    pub fn gcr(value: &u8) -> char {
+        Board::B.castles.get_by_right(value).unwrap().clone()
+    }
+    // promotions by left'n'right values
+    pub fn grl(promotion: &char) -> u8 {
+        Board::B.promotions.get_by_left(promotion).unwrap().clone()
+    }
+    pub fn grr(value: &u8) -> char {
+        Board::B.promotions.get_by_right(value).unwrap().clone()
+    }
+
+    // and more
+
+    // get piece value by char with bit the shift to store in Mov
+    pub fn gpls(piece: &char) -> u8 {
+        (Board::B.pieces.get_by_left(piece).unwrap().clone() & 254) << Board::B.shift_piece
+    }
+    // get piece Mov value by Board value (basically transform piece to store in move)
+    pub fn sav(piece: u8) -> u8 {
+        (piece & 254) << Board::B.shift_piece
+    }
+    // extract piece value from move data and convert to board piece value (reminder, color's not stored)
+    pub fn ptp(data: u8) -> u8 {
+        (data >> Board::B.shift_piece) & Board::B.mask_piece
+    }
+    // extract promotion value from move data and convert to board piece value
+    pub fn rtp(data: u8) -> u8 {
+        Board::gpl(&Board::grr(&((data >> Board::B.shift_promotion) & Board::B.mask_promotion)))
     }
 }
 
@@ -852,7 +937,6 @@ pub fn in_bound(y: u8, x: u8, y_sub: u8, x_sub: u8) -> bool {
     !(y > 7 + y_sub || x > 7 + x_sub || y_sub > y || x_sub > x)
 }
 
-// TODO - make more use of this when 2d check is unnecessary
 pub fn in_bound_single(val: u8, sub: u8) -> bool {
     !(val > 7 + sub || sub > val)
 }
@@ -860,24 +944,24 @@ pub fn in_bound_single(val: u8, sub: u8) -> bool {
 fn get_default_board() -> [[u8; 8]; 8] {
     let mut field = [[0; 8]; 8];
     for i in 0..7 {
-        field[1][i] = PIECES[&'K'];
-        field[6][i] = PIECES[&'k'];
+        field[1][i] = Board::gpl(&'P');
+        field[6][i] = Board::gpl(&'p');
     }
-    field[0][0] = PIECES[&'R'];
-    field[0][1] = PIECES[&'N'];
-    field[0][2] = PIECES[&'B'];
-    field[0][3] = PIECES[&'Q'];
-    field[0][4] = PIECES[&'K'];
-    field[0][5] = PIECES[&'B'];
-    field[0][6] = PIECES[&'N'];
-    field[0][7] = PIECES[&'R'];
-    field[7][0] = PIECES[&'r'];
-    field[7][1] = PIECES[&'n'];
-    field[7][2] = PIECES[&'b'];
-    field[7][3] = PIECES[&'q'];
-    field[7][4] = PIECES[&'k'];
-    field[7][5] = PIECES[&'b'];
-    field[7][6] = PIECES[&'n'];
-    field[7][7] = PIECES[&'r'];
+    field[0][0] = Board::gpl(&'R');
+    field[0][1] = Board::gpl(&'N');
+    field[0][2] = Board::gpl(&'B');
+    field[0][3] = Board::gpl(&'Q');
+    field[0][4] = Board::gpl(&'K');
+    field[0][5] = Board::gpl(&'B');
+    field[0][6] = Board::gpl(&'N');
+    field[0][7] = Board::gpl(&'R');
+    field[7][0] = Board::gpl(&'r');
+    field[7][1] = Board::gpl(&'n');
+    field[7][2] = Board::gpl(&'b');
+    field[7][3] = Board::gpl(&'q');
+    field[7][4] = Board::gpl(&'k');
+    field[7][5] = Board::gpl(&'b');
+    field[7][6] = Board::gpl(&'n');
+    field[7][7] = Board::gpl(&'r');
     field
 }
