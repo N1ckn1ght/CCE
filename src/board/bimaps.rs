@@ -1,6 +1,7 @@
 use bimap::BiMap;
 use std::char;
 
+#[derive(Clone)]
 pub struct Bimaps {
     pub pieces: BiMap::<char, u8>,
     pub castles: BiMap::<char, u8>,

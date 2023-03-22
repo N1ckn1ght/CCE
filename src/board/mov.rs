@@ -1,6 +1,6 @@
 use crate::board::coord::Coord;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Mov {
     // data will store bits as follows:
     // 1 bit - is this move a double check? -- TODO
