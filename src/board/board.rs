@@ -4,6 +4,7 @@ use crate::board::mov::Mov;
 use crate::board::mov::BMov;
 use std::char;
 use std::cmp::{max, min};
+use std::mem::swap;
 use std::vec::Vec;
 
 #[derive(PartialEq, Clone, Copy)]
@@ -290,7 +291,7 @@ impl Board {
         let color_bit: u8 = self.white_to_move as u8;
         match check {
             Check::Unknown | Check::InCheck => {
-                // scan for any moves carefully
+                // scan for any pseudo-legal moves
                 for y in 0..7 {
                     for x in 0..7 {
                         if self.field[y as usize][x as usize] > 0 {
@@ -298,7 +299,8 @@ impl Board {
                             if piece == Board::gpl(&'p') {
                                 self.add_legal_moves_p(&mut moves, y, x, color_bit);
                             } else if piece == Board::gpl(&'k') {
-                                self.add_legal_moves_k(&mut moves, y, x, color_bit, check_status);
+                                // to clarify: we need only pseudo-legal moves here
+                                self.add_legal_moves_k(&mut moves, y, x, color_bit, Some(Check::NotInCheck));
                             } else if piece == Board::gpl(&'n') {
                                 self.add_legal_moves_n(&mut moves, y, x, color_bit);
                             } else if piece == Board::gpl(&'b') {
@@ -312,25 +314,80 @@ impl Board {
                         }
                     }
                 }
-                // make search if in check for each move for every piece!
+                // make careful search if in check for each move for every piece!
                 let mut i = 0;
                 let mut len = moves.len();
-                while (i < len) {
-                    self.makemove(moves[i]);
-                    // todo
-                    i += 1;
+                while i < len {
+                    self.make_move(moves[i]);
+                    let current_king: &Coord = self.get_current_king_coord(false);
+                    if self.is_under_attack(current_king.y, current_king.x, self.white_to_move, [true; 5]) {
+                        swap(&mut moves[i], &mut moves[len - 1]);
+                        moves.pop();
+                        len -= 1;
+                    } else {
+                        i += 1;
+                    }
                 }
             }
             Check::NotInCheck => {
-                // scan for any moves
-            },
-            Check::InCheck => {
-                
+                // still scan for any pseudo-legal moves
+                for y in 0..7 {
+                    for x in 0..7 {
+                        if self.field[y as usize][x as usize] > 0 {
+                            let piece = self.field[y as usize][x as usize] - color_bit;
+                            if piece == Board::gpl(&'p') {
+                                self.add_legal_moves_p(&mut moves, y, x, color_bit);
+                            } else if piece == Board::gpl(&'k') {
+                                self.add_legal_moves_k(&mut moves, y, x, color_bit, Some(Check::NotInCheck));
+                            } else if piece == Board::gpl(&'n') {
+                                self.add_legal_moves_n(&mut moves, y, x, color_bit);
+                            } else if piece == Board::gpl(&'b') {
+                                self.add_legal_moves_bq(&mut moves, y, x, color_bit);
+                            } else if piece == Board::gpl(&'r') {
+                                self.add_legal_moves_rq(&mut moves, y, x, color_bit);
+                            } else if piece == Board::gpl(&'q') {
+                                self.add_legal_moves_bq(&mut moves, y, x, color_bit);
+                                self.add_legal_moves_rq(&mut moves, y, x, color_bit);
+                            }
+                        }
+                    }
+                }
+                // make simple search on if in check
+                let mut i = 0;
+                let mut len = moves.len();
+                while i < len {
+                    self.make_move(moves[i]);
+                    let current_king: &Coord = self.get_current_king_coord(false);
+                    if self.is_under_attack(current_king.y, current_king.x, self.white_to_move, [true, true, true, false, false]) {
+                        swap(&mut moves[i], &mut moves[len - 1]);
+                        moves.pop();
+                        len -= 1;
+                    } else {
+                        i += 1;
+                    }
+                }
             },
             Check::InDoubleCheck => {
-                // scan for only king moves
+                // now only king can move
+                let current_king: &Coord = self.get_current_king_coord(false);
+                self.add_legal_moves_k(&mut moves, current_king.y, current_king.x, self.white_to_move as u8, Some(Check::InDoubleCheck));
+                // make full search on if in check
+                let mut i = 0;
+                let mut len = moves.len();
+                while i < len {
+                    self.make_move(moves[i]);
+                    if self.is_under_attack(current_king.y, current_king.x, self.white_to_move, [true; 5]) {
+                        swap(&mut moves[i], &mut moves[len - 1]);
+                        moves.pop();
+                        len -= 1;
+                    } else {
+                        i += 1;
+                    }
+                }
             },
             Check::InMate => {
+                // no legal moves if it's already clear that it's a mate
+                // if it's a draw, there will be no check however
                 return Vec::new()
             }
         }
