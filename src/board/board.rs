@@ -371,7 +371,7 @@ impl Board {
             },
             Check::InDoubleCheck => {
                 // now only king can move
-                let current_king: &Coord = self.get_current_king_coord(false);
+                let current_king: Coord = *self.get_current_king_coord(false);
                 self.add_legal_moves_k(&mut moves, current_king.y, current_king.x, self.white_to_move as u8, Some(Check::InDoubleCheck));
                 // make full search on if in check
                 let mut i = 0;
