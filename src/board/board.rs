@@ -167,6 +167,7 @@ impl Board {
         // assuming this move is not capture or a pawn move
         self.hmw += 1;
 
+        // TODO: handle castlings in Fischer/960 chess as well (simple condition change)
         // update king locations + check for special cases (this one is castle)
         if piece == self.gpl(&'k') {
             self.black_king_location = Coord{y: mov.to.y, x: mov.to.x};
@@ -329,6 +330,7 @@ impl Board {
                     } else {
                         i += 1;
                     }
+                    self.revert_move();
                 }
             }
             Check::NotInCheck => {
@@ -390,10 +392,9 @@ impl Board {
             Check::InMate => {
                 // no legal moves if it's already clear that it's a mate
                 // if it's a draw, there will be no check however
-                return Vec::new()
             }
         }
-        Vec::new()
+        moves
     }
 
     // debug output for now
@@ -422,6 +423,7 @@ impl Board {
     // 1 stands for WHITE, 0 stands for BLACK
     pub fn is_under_attack(& self, y: u8, x: u8, color_of_attacker: bool, checks: [bool; 5]) -> bool {
         let color_bit = color_of_attacker as u8;
+
         (checks[0] && self.is_under_attack_bq(y, x, color_bit)) || 
         (checks[1] && self.is_under_attack_rq(y, x, color_bit)) ||
         (checks[2] && self.is_under_attack_n(y, x, color_bit)) || 
@@ -431,7 +433,7 @@ impl Board {
 
     // check if opponent's knight is attacking this cell
     fn is_under_attack_n(& self, y: u8, x: u8, color_bit: u8) -> bool {
-        for i in 1..2 {
+        for i in 1..3 {
             if Self::in_bound(y + 3, x + i, i, 0) && self.field[(y + 3 - i) as usize][(x + i)  as usize] == self.gpl(&'b') + color_bit {
                 return true;
             }
@@ -584,14 +586,11 @@ impl Board {
     fn is_under_attack_k(& self, y: u8, x: u8, color_of_attacker: bool) -> bool {
         let king: &Coord;
         if color_of_attacker {
-            king = &self.black_king_location;
-        } else {
             king = &self.white_king_location;
+        } else {
+            king = &self.black_king_location;
         }
-        if max(king.y, y) - min(king.y, y) < 2 && max(king.x, x) - min(king.x, x) < 2 {
-            return true;
-        }
-        false
+        return max(king.y, y) - min(king.y, y) < 2 && max(king.x, x) - min(king.x, x) < 2;
     }
 
     // check if opponent's pawn is attacking this cell
@@ -619,7 +618,8 @@ impl Board {
     fn add_legal_moves_n(& self, vec: &mut Vec<Mov>, y: u8, x: u8, color_bit: u8) {
         let mut coord: Coord;
         let mut piece: u8;
-        for i in 1..2 {
+        // TODO: fix this
+        for i in 1..3 {
             if Self::in_bound(y + 3, x + i, i, 0) {
                 coord = Coord{y: y + 3 - i, x: x + i};
                 piece = self.field[coord.y as usize][coord.x as usize];
