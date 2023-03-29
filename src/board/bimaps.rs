@@ -48,9 +48,9 @@ impl Bimaps {
         castles.insert('K', 128);
 
         promotions.insert('b', 0);
-        promotions.insert('r', 2);
-        promotions.insert('n', 4);
-        promotions.insert('q', 6);
+        promotions.insert('r', 1);
+        promotions.insert('n', 2);
+        promotions.insert('q', 3);
 
         Bimaps{pieces, castles, promotions, shift_piece, shift_promotion, mask_piece, mask_promotion}
     }
