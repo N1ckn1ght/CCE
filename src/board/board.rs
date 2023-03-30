@@ -1,7 +1,7 @@
 use crate::board::bimaps::Bimaps;
 use crate::board::coord::Coord;
 use crate::board::mov::Mov;
-use crate::board::mov::BMov;
+use crate::board::mov::BoardMov;
 use std::char;
 use std::cmp::{max, min};
 use std::vec::Vec;
@@ -25,7 +25,7 @@ pub struct Board {
     // btw 0 or 1 are both considered as empty squares
     pub field: [[u8; 8]; 8],
     // move storage for a takeback (revert) function
-    history: Vec<BMov>,
+    history: Vec<BoardMov>,
     // 1 - white to move, 0 - black to move 
     pub white_to_move: bool,
     // coordinate of en passant if possible, otherwise 8, 8
@@ -66,7 +66,7 @@ impl Board {
 
     pub fn parse_fen(FEN: String) -> Board {
         let mut field: [[u8; 8]; 8] = [[0; 8]; 8];
-        let history: Vec<BMov> = Vec::new();
+        let history: Vec<BoardMov> = Vec::new();
         let mut white_to_move: bool = true;
         let mut en_passant: Coord = Coord::new(8, 8);
         let mut castling: u8 = 0;
@@ -159,7 +159,7 @@ impl Board {
         let piece = self.field[mov.from.y() as usize][mov.from.x() as usize];
 
         // make a move
-        self.history.push(BMov{mov, castling: self.castling, en_passant: self.en_passant, hmw: self.hmw});
+        self.history.push(BoardMov{mov, castling: self.castling, en_passant: self.en_passant, hmw: self.hmw});
         self.field[mov.to.y() as usize][mov.to.x() as usize] = self.field[mov.from.y() as usize][mov.from.x() as usize];
         self.field[mov.from.y() as usize][mov.from.x() as usize] = 0;
 
@@ -253,7 +253,7 @@ impl Board {
     }
 
     pub fn revert_move(&mut self) {
-        let bmov: BMov = self.history.pop().unwrap();
+        let bmov: BoardMov = self.history.pop().unwrap();
         let mov: &Mov = &bmov.mov;
         let piece: u8 = self.field[mov.to.y() as usize][mov.to.x() as usize];
 

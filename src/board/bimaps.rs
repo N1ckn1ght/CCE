@@ -3,6 +3,15 @@ use std::char;
 
 #[derive(Clone)]
 pub struct Bimaps {
+    // Mov data will store bits as follows:
+    // 1 bit - is this move a double check? | if both - this is checkmate
+    // 2 bit - is this move a check?        |
+    // 3 bits - 5 bits: captured piece, if any
+    // 110 - queen, 101 - rook, 100 - bishop, 011 - knight, 001 - pawn
+    // 6 bits - 7 bits: promotion piece
+    // 11 - queen, 10 - knight, 01 - rook, 00 - bishop
+    // 8 bit - is this move one of the follows: castling, en passant, promotion?
+
     pub pieces: BiMap::<char, u8>,
     pub castles: BiMap::<char, u8>,
     pub promotions: BiMap::<char, u8>,
@@ -10,7 +19,10 @@ pub struct Bimaps {
     pub shift_piece: u8,
     pub shift_promotion: u8,
     pub mask_piece: u8,
-    pub mask_promotion: u8
+    pub mask_promotion: u8,
+
+    pub bit_check: u8,
+    pub bit_double_check: u8
 }
 
 impl Bimaps {
@@ -27,6 +39,9 @@ impl Bimaps {
         let mask_piece: u8 = 14;
         // bit mask to extract a (shifted) promotion value
         let mask_promotion: u8 = 3;
+
+        let bit_check: u8 = 64;
+        let bit_double_check: u8 = 128;
 
         pieces.insert(' ', 0);
         pieces.insert('p', 2);
@@ -52,6 +67,6 @@ impl Bimaps {
         promotions.insert('n', 2);
         promotions.insert('q', 3);
 
-        Bimaps{pieces, castles, promotions, shift_piece, shift_promotion, mask_piece, mask_promotion}
+        Bimaps{pieces, castles, promotions, shift_piece, shift_promotion, mask_piece, mask_promotion, bit_check, bit_double_check}
     }
 }
