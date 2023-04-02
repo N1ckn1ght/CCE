@@ -1,5 +1,6 @@
 mod board;
 mod engine;
+mod characters;
 
 use std::{cmp::{max, min}, io::{stdin, stdout, Write}};
 use crate::board::{board::Board, coord::Coord, mov::Mov};

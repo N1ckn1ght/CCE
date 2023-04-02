@@ -10,18 +10,17 @@ pub enum Check {
     Unknown,
     NotInCheck,
     InCheck,
-    InDoubleCheck,
-    InMate
+    InDoubleCheck
 }
 
 // question to myself: why pieces couldn't be classes?
 #[derive(Clone)]
 pub struct Board {
-    // 12 - queen, 10 - rook, 8 - bishop, 6 - knight, 4 - king, 2 - pawn
-    // +1 if it's a white piece
-    // this choice is for better synergy with mov structure
     // white will have their pieces on 0, 1 horizontals, black on 6, 7
-    // btw 0 or 1 are both considered as empty squares
+    // last bit (0 or 1) is a color bit
+    // so if field[i][j] is < 2 then it's an empty square
+    // otherwise please rely on board.gpl(&char) or board.gpr(&value) methods
+    // chars: 'p', 'n', 'b', 'r', 'q', 'k' (see Bimaps for further reference)
     pub field: [[u8; 8]; 8],
     // move storage for a takeback (revert) function
     history: Vec<BoardMov>,
@@ -417,10 +416,6 @@ impl Board {
                         }
                     }
                 }
-            },
-            Check::InMate => {
-                // no legal moves if it's already clear that it's a mate
-                // if it's a draw, there will be no check however
             }
         }
 
