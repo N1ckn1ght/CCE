@@ -1,10 +1,9 @@
-use crate::board::bimaps::Bimaps;
-use crate::board::coord::Coord;
-use crate::board::mov::Mov;
-use crate::board::mov::BoardMov;
 use std::char;
 use std::cmp::{max, min};
 use std::vec::Vec;
+use super::bimaps::Bimaps;
+use super::coord::Coord;
+use super::mov::{BoardMov, Mov};
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum Check {
@@ -45,6 +44,9 @@ pub struct Board {
     // TODO: find a better way to store CONSTANT BIMAPS 
     // (they are not constant because Rust says so! shouldn't even be inside struct)
     bimaps: Bimaps
+
+    // TODO: make is_under_attack check more fast when there're less pieces
+    // piece_count: [u8; 12]
 }
 
 impl Board {
@@ -154,6 +156,8 @@ impl Board {
         Board{field, history, white_to_move, en_passant, castling, hmw, no, white_king_location, black_king_location, bimaps}
     }
     
+    // TODO: export as FEN
+
     // Careful: this function WILL MAKE A MOVE without additional checks on if it's a legal move or not!
     pub fn make_move(&mut self, mov: Mov) {
         let piece = self.field[mov.from.y() as usize][mov.from.x() as usize];
@@ -302,10 +306,12 @@ impl Board {
         self.white_to_move = !self.white_to_move;
     }
 
-    pub fn get_legal_moves(&mut self, check_status: Option<Check>) -> Vec<Mov> {
+    pub fn get_legal_moves(&mut self, current_king_check_status: Option<Check>, save_opponent_king_check_status: Option<bool>) -> Vec<Mov> {
         let mut moves: Vec<Mov> = vec![];
-        let check: Check = check_status.unwrap_or(Check::Unknown);
+        let check: Check = current_king_check_status.unwrap_or(Check::Unknown);
         let color_bit: u8 = self.white_to_move as u8;
+        let save: bool = save_opponent_king_check_status.unwrap_or(false);
+        
         match check {
             Check::Unknown | Check::InCheck => {
                 // scan for any pseudo-legal moves
@@ -343,6 +349,9 @@ impl Board {
                         len -= 1;
                     } else {
                         i += 1;
+                        if save {
+                            self.add_check_bits(&mut moves[i]);
+                        }
                     }
                     self.revert_move();
                 }
@@ -376,12 +385,15 @@ impl Board {
                 while i < len {
                     self.make_move(moves[i]);
                     let current_king: &Coord = self.get_current_king_coord(false);
-                    if self.is_under_attack(current_king.y(), current_king.x(), self.white_to_move, [true, true, true, false, false]) {
+                    if self.is_under_attack(current_king.y(), current_king.x(), self.white_to_move, [true, true, false, false, false]) {
                         moves[i] = moves[len - 1];
                         moves.pop();
                         len -= 1;
                     } else {
                         i += 1;
+                        if save {
+                            self.add_check_bits(&mut moves[i]);
+                        }
                     }
                 }
             },
@@ -400,6 +412,9 @@ impl Board {
                         len -= 1;
                     } else {
                         i += 1;
+                        if save {
+                            self.add_check_bits(&mut moves[i]);
+                        }
                     }
                 }
             },
@@ -408,6 +423,7 @@ impl Board {
                 // if it's a draw, there will be no check however
             }
         }
+
         moves
     }
 
@@ -439,6 +455,7 @@ impl Board {
     // this is rather slow and should not be extensive used
     // if color is WHITE, we are searching for WHITE threats for a BLACK piece
     // 1 stands for WHITE, 0 stands for BLACK
+    // TODO: store amount of b/r/q pieces to not search for their attacks if there aren't
     pub fn is_under_attack(& self, y: u8, x: u8, color_of_attacker: bool, checks: [bool; 5]) -> bool {
         let color_bit = color_of_attacker as u8;
 
@@ -977,6 +994,34 @@ impl Board {
         }
     }
 
+    // call this before reverting (a LEGAL move)
+    fn add_check_bits(& self, mov: &mut Mov) {
+        let piece = self.field[mov.to.y() as usize][mov.to.x() as usize] - self.white_to_move as u8;
+        let current_king: &Coord = self.get_current_king_coord(true);
+        if piece == self.gpl(&'b') || piece == self.gpl(&'r') || piece == self.gpl(&'q') {
+            if self.is_under_attack(current_king.y(), current_king.x(), !self.white_to_move, [true, true, false, false, false]) {
+                mov.data |= self.bimaps.bit_check;
+                // temporary impossible to trace double check in this case, see TODOs
+            }
+        } else if piece == self.gpl(&'k') {
+            if self.is_under_attack(current_king.y(), current_king.x(), !self.white_to_move, [true, true, false, false, false]) {
+                mov.data |= self.bimaps.bit_check;
+            }
+        } else if piece == self.gpl(&'p') {
+            if self.is_under_attack(current_king.y(), current_king.x(), !self.white_to_move, [true, true, false, false, true]) {
+                mov.data |= self.bimaps.bit_check;
+            }
+        } else if piece == self.gpl(&'n') {
+            if self.is_under_attack(current_king.y(), current_king.x(), !self.white_to_move, [true, true, false, false, false]) {
+                mov.data |= self.bimaps.bit_check;
+            }
+            if self.is_under_attack(current_king.y(), current_king.x(), !self.white_to_move, [false, false, true, false, false]) {
+                // mov.data ^= self.bimaps.bit_check;
+                mov.data |= self.bimaps.bit_double_check;
+            }
+        }
+    }
+
     // addon methods to simplify work with the board
     // TODO: make it simple, dammit!
 
@@ -1069,5 +1114,14 @@ impl Board {
         field[7][6] = bimaps.pieces.get_by_left(&'n').unwrap().clone();
         field[7][7] = bimaps.pieces.get_by_left(&'r').unwrap().clone();
         field
+    }
+
+    pub fn bit_to_check(& self, value: &u8) -> Check {
+        if value & self.bimaps.bit_double_check > 0 {
+            return Check::InDoubleCheck;
+        } else if value & self.bimaps.bit_check > 0 {
+            return Check::InCheck;
+        }
+        Check::Unknown
     }
 }

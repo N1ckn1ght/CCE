@@ -18,11 +18,3 @@ pub struct BoardMov {
     pub en_passant: Coord,
     pub hmw: u8
 }
-
-// need to store move eval with the move itself
-// + if there's a winning sequence, we should look onto the fastest possible
-pub struct EvalMov {
-    pub mov: Mov,
-    pub score: f32,
-    pub mate_in: i8
-}

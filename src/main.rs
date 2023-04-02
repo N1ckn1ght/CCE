@@ -1,4 +1,5 @@
 mod board;
+mod engine;
 
 use std::{cmp::{max, min}, io::{stdin, stdout, Write}};
 use crate::board::{board::Board, coord::Coord, mov::Mov};
@@ -15,7 +16,7 @@ pub fn test_loop(FEN: Option<String>) {
 
     loop {
         b.print();
-        let mut moves: Vec<Mov> = b.get_legal_moves(None);
+        let mut moves: Vec<Mov> = b.get_legal_moves(None, None);
         println!("Total moves: {}", moves.len());
         for i in 0..moves.len() {
             print!("{} ", move_to_user(&b, &moves[i]));

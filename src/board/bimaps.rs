@@ -4,8 +4,9 @@ use std::char;
 #[derive(Clone)]
 pub struct Bimaps {
     // Mov data will store bits as follows:
-    // 1 bit - is this move a double check? | if both - this is checkmate
-    // 2 bit - is this move a check?        |
+    // 1 bit - is this move a double check? | double check is not always detectable! 
+    //                                      | TODO: distinct is_in_check for r/q, b/q?
+    // 2 bit - is this move a check?        | mate would be a check with no legal moves left
     // 3 bits - 5 bits: captured piece, if any
     // 110 - queen, 101 - rook, 100 - bishop, 011 - knight, 001 - pawn
     // 6 bits - 7 bits: promotion piece
