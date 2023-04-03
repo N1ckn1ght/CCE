@@ -10,7 +10,7 @@ pub struct Eval {
 
 impl Eval {
     const BIG_SCORE: f32 = 1048576.0;
-    const BIG_MATE_IN: i8 = 127;
+    const BIG_MATE: i8 = 127;
 
     pub fn new(score: f32, mate_in: i8) -> Eval {
         Eval { score, mate_in }
@@ -21,11 +21,19 @@ impl Eval {
     }
 
     pub fn highest() -> Eval {
-        Eval { score: Eval::BIG_SCORE, mate_in: Eval::BIG_MATE_IN }
+        Eval { score: Eval::BIG_SCORE, mate_in: 1 }
     }
 
     pub fn lowest() -> Eval {
-        Eval { score: -Eval::BIG_SCORE, mate_in: -Eval::BIG_MATE_IN }
+        Eval { score: -Eval::BIG_SCORE, mate_in: -1 }
+    }
+
+    pub fn high() -> Eval {
+        Eval { score: 0.0, mate_in: Eval::BIG_MATE }
+    }
+
+    pub fn low() -> Eval {
+        Eval { score: 0.0, mate_in: -Eval::BIG_MATE }
     }
 }
 
@@ -59,8 +67,11 @@ impl PartialOrd for Eval {
             }
             return Some(Ordering::Less);
         }
-        if other.mate_in < 0 {
+        if other.mate_in <= 0 {
             return Some(Ordering::Greater);
+        }
+        if self.mate_in == 0 {
+            return Some(Ordering::Less);
         }
         if self.mate_in < other.mate_in {
             return Some(Ordering::Greater);
@@ -91,8 +102,11 @@ impl Ord for Eval {
             }
             return Ordering::Less;
         }
-        if other.mate_in < 0 {
+        if other.mate_in <= 0 {
             return Ordering::Greater;
+        }
+        if self.mate_in == 0 {
+            return Ordering::Less;
         }
         if self.mate_in < other.mate_in {
             return Ordering::Greater;

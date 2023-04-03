@@ -1,12 +1,10 @@
-use crate::{engine::character::Character, board::board::Board};
+use crate::{engine::character::Character, board::board::{Board, Check}};
 
-struct Materialist;
+pub struct Materialist;
 
 impl Character for Materialist {
-    fn static_eval(&self, board: &Board) -> f32 {
+    fn static_eval(&self, board: &Board, check: Check, legal_moves_count: u8) -> f32 {
         let mut score: f32 = 0.0;
-        // TODO: necessity to run through entire board doesn't seem quite right (even though it's O(64))
-        // maybe it'd be good to storage piece coordinates in Board to not navigate them through field manually...
         for i in 0..8 {
             for j in 0..8 {
                 if board.field[i][j] < 2 {
@@ -30,6 +28,7 @@ impl Character for Materialist {
                 }
             }
         }
+
         score
     }
 }

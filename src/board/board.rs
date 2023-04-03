@@ -1,6 +1,8 @@
 use std::char;
 use std::cmp::{max, min};
 use std::vec::Vec;
+use crate::utils::utils::move_to_user;
+
 use super::bimaps::Bimaps;
 use super::coord::Coord;
 use super::mov::{BoardMov, Mov};
@@ -154,8 +156,6 @@ impl Board {
 
         Board{field, history, white_to_move, en_passant, castling, hmw, no, white_king_location, black_king_location, bimaps}
     }
-    
-    // TODO: export as FEN
 
     // Careful: this function WILL MAKE A MOVE without additional checks on if it's a legal move or not!
     pub fn make_move(&mut self, mov: Mov) {
@@ -171,7 +171,6 @@ impl Board {
 
         let mut temp_en_passant: Coord = Coord::new(8, 8);
 
-        // TODO: handle castlings in Fischer/960 chess as well (simple condition change)
         // update king locations + check for special cases (this one is castle)
         if piece == self.gpl(&'k') {
             self.black_king_location.set(mov.to.y(), mov.to.x());
@@ -291,7 +290,7 @@ impl Board {
             }
         } else if mov.data & 1 == 1 {
             // cancel en passant
-            if piece - self.white_to_move as u8 == self.gpl(&'p') {
+            if piece == self.gpl(&'p') + !self.white_to_move as u8 {
                 // now it's still other side to move, not takebacken one!
                 self.field[(mov.to.y() - 1 + (self.white_to_move as u8) * 2) as usize][mov.to.x() as usize] = self.gpl(&'p') + self.white_to_move as u8;
                 // remove duplicated pawn?
@@ -347,10 +346,10 @@ impl Board {
                         moves.pop();
                         len -= 1;
                     } else {
-                        i += 1;
                         if save {
                             self.add_check_bits(&mut moves[i]);
                         }
+                        i += 1;
                     }
                     self.revert_move();
                 }
@@ -389,11 +388,12 @@ impl Board {
                         moves.pop();
                         len -= 1;
                     } else {
-                        i += 1;
                         if save {
                             self.add_check_bits(&mut moves[i]);
                         }
+                        i += 1;
                     }
+                    self.revert_move();
                 }
             },
             Check::InDoubleCheck => {
@@ -410,31 +410,17 @@ impl Board {
                         moves.pop();
                         len -= 1;
                     } else {
-                        i += 1;
                         if save {
                             self.add_check_bits(&mut moves[i]);
                         }
+                        i += 1;
                     }
+                    self.revert_move();
                 }
             }
         }
 
         moves
-    }
-
-    // TODO - make more user-friendly debug output
-    pub fn print(& self) {
-        for i in 0..8 {
-            for j in 0..8 {
-                if self.field[7 - i][j] > 1 {
-                    print!("{}\t", self.gpr(&self.field[7 - i][j]));
-                } else {
-                    print!(".\t");
-                }
-            }
-            println!();
-        }
-        println!();
     }
 
     pub fn get_current_king_coord(& self, is_current_color: bool) -> &Coord {
@@ -450,7 +436,6 @@ impl Board {
     // this is rather slow and should not be extensive used
     // if color is WHITE, we are searching for WHITE threats for a BLACK piece
     // 1 stands for WHITE, 0 stands for BLACK
-    // TODO: store amount of b/r/q pieces to not search for their attacks if there aren't
     pub fn is_under_attack(& self, y: u8, x: u8, color_of_attacker: bool, checks: [bool; 5]) -> bool {
         let color_bit = color_of_attacker as u8;
 
@@ -648,7 +633,6 @@ impl Board {
     fn add_legal_moves_n(& self, vec: &mut Vec<Mov>, y: u8, x: u8, color_bit: u8) {
         let mut coord: Coord;
         let mut piece: u8;
-        // TODO: fix this
         for i in 1..3 {
             if Self::in_bound(y + 3, x + i, i, 0) {
                 coord = Coord::new(y + 3 - i, x + i);
@@ -919,6 +903,7 @@ impl Board {
                         }
                     }
                 }
+                // TODO: move to a different fuction, shouldn't being checked here every single time
                 // en passant
                 if self.en_passant.y() == 5 && y == 4 {
                     if x + 1 == self.en_passant.x() || x == self.en_passant.x() + 1 {
@@ -991,7 +976,7 @@ impl Board {
 
     // call this before reverting (a LEGAL move)
     fn add_check_bits(& self, mov: &mut Mov) {
-        let piece = self.field[mov.to.y() as usize][mov.to.x() as usize] - self.white_to_move as u8;
+        let piece = self.field[mov.to.y() as usize][mov.to.x() as usize] - !self.white_to_move as u8;
         let current_king: &Coord = self.get_current_king_coord(true);
         if piece == self.gpl(&'b') || piece == self.gpl(&'r') || piece == self.gpl(&'q') {
             if self.is_under_attack(current_king.y(), current_king.x(), !self.white_to_move, [true, true, false, false, false]) {
@@ -1011,8 +996,11 @@ impl Board {
                 mov.data |= self.bimaps.bit_check;
             }
             if self.is_under_attack(current_king.y(), current_king.x(), !self.white_to_move, [false, false, true, false, false]) {
-                // mov.data ^= self.bimaps.bit_check;
-                mov.data |= self.bimaps.bit_double_check;
+                if mov.data & self.bimaps.bit_check > 0 {
+                    mov.data |= self.bimaps.bit_double_check;
+                } else {
+                    mov.data |= self.bimaps.bit_check;
+                }
             }
         }
     }
@@ -1111,12 +1099,35 @@ impl Board {
         field
     }
 
-    pub fn bit_to_check(& self, value: &u8) -> Check {
-        if value & self.bimaps.bit_double_check > 0 {
+    // extract check status from mov data (assuming add_check_bits was called before)
+    pub fn get_check(& self, data: &u8) -> Check {
+        if data & self.bimaps.bit_double_check > 0 {
             return Check::InDoubleCheck;
-        } else if value & self.bimaps.bit_check > 0 {
+        } else if data & self.bimaps.bit_check > 0 {
             return Check::InCheck;
         }
-        Check::Unknown
+        Check::NotInCheck
+    }
+
+    // debug methods
+
+    pub fn print(& self) {
+        for i in 0..8 {
+            for j in 0..8 {
+                if self.field[7 - i][j] > 1 {
+                    print!("{}\t", self.gpr(&self.field[7 - i][j]));
+                } else {
+                    print!(".\t");
+                }
+            }
+            println!();
+        }
+        println!();
+    }
+
+    pub fn print_history(& self) {
+        for bmov in &self.history {
+            println!("{}", move_to_user(&self, &bmov.mov));
+        }
     }
 }
