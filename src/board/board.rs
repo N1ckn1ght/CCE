@@ -383,7 +383,16 @@ impl Board {
                 while i < len {
                     self.make_move(moves[i]);
                     let current_king: &Coord = self.get_current_king_coord(false);
-                    if self.is_under_attack(current_king.y(), current_king.x(), self.white_to_move, [true, true, false, false, false]) {
+
+                    // if it's not a king's move, b/r/q search will be sufficient, but otherwise...
+                    let mut checks = [true, true, false, false, false];
+                    if self.field[moves[i].to.y() as usize][moves[i].to.x() as usize] == self.gpl(&'k') + !self.white_to_move as u8 {
+                        checks[2] = true;
+                        checks[3] = true;
+                        checks[4] = true;
+                    }
+
+                    if self.is_under_attack(current_king.y(), current_king.x(), self.white_to_move, checks) {
                         moves[i] = moves[len - 1];
                         moves.pop();
                         len -= 1;
@@ -618,10 +627,10 @@ impl Board {
                 return true;
             }
         } else {
-            if Self::in_bound(y + 1, x + 1, 1, 0) && self.field[(y + 1) as usize][(x + 1) as usize] == self.gpl(&'p') {
+            if Self::in_bound(y + 1, x + 1, 0, 0) && self.field[(y + 1) as usize][(x + 1) as usize] == self.gpl(&'p') {
                 return true;
             }
-            if Self::in_bound(y + 1, x, 1, 1) && self.field[(y + 1) as usize][(x - 1) as usize] == self.gpl(&'p') {
+            if Self::in_bound(y + 1, x, 0, 1) && self.field[(y + 1) as usize][(x - 1) as usize] == self.gpl(&'p') {
                 return true;
             }
         }

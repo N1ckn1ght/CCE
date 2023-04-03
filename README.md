@@ -1,0 +1,3 @@
+# Custom Chess Engine
+
+Work in Progress, Readme too...

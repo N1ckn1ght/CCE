@@ -52,9 +52,8 @@ impl Minimax {
 
         let mut eval: Eval;
         let mut moves: Vec<Mov> = board.get_legal_moves(Some(check), Some(true));
-        
-        // No moves? check for victory / stalemate
 
+        // No moves? check for victory / stalemate
         if moves.len() == 0 {
             if check == Check::InCheck || check == Check::InDoubleCheck {
                 if maximize {

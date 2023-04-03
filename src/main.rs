@@ -12,7 +12,7 @@ use crate::utils::utils::{move_to_user, move_to_board};
 
 pub fn main() {
     env::set_var("RUST_BACKTRACE", "1");
-    test_loop("6kq/5ppp/4P3/8/8/8/8/BB4K1 w - - 0 1".to_string(), &Materialist{}, 4);
+    test_loop("rnbqkbnr/pppp1ppp/8/8/4pPP1/P7/1PPPP2P/RNBQKBNR b KQkq f3 0 3".to_string(), &Materialist{}, 4);
 }
 
 // some tests
