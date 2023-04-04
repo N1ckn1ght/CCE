@@ -27,7 +27,7 @@ pub struct Bimaps {
 }
 
 impl Bimaps {
-    pub fn init() -> Bimaps {
+    pub fn init() -> Self {
         let mut pieces = BiMap::<char, u8>::new();
         let mut castles = BiMap::<char, u8>::new();
         let mut promotions = BiMap::<char, u8>::new();

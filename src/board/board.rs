@@ -51,7 +51,7 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn new() -> Board {
+    pub fn new() -> Self {
         let bimaps = Bimaps::init();
         Board{
             field: Board::get_default_board(&bimaps),
@@ -67,7 +67,7 @@ impl Board {
         }
     }
 
-    pub fn parse_fen(FEN: String) -> Board {
+    pub fn parse_fen(FEN: &String) -> Self {
         let mut field: [[u8; 8]; 8] = [[0; 8]; 8];
         let history: Vec<BoardMov> = Vec::new();
         let mut white_to_move: bool = true;
@@ -79,7 +79,7 @@ impl Board {
         let mut black_king_location = Coord::new(7, 4);
         let bimaps = Bimaps::init();
 
-        let parts = FEN.split(" ");
+        let parts = FEN.split_ascii_whitespace();
         let mut col: u8 = 0;
         let mut row: u8 = 7;
         let mut pn: u8 = 0;
@@ -137,7 +137,7 @@ impl Board {
                         if c == '-' {
                             break;
                         }
-                        row = c as u8 - 'a' as u8;
+                        row = c as u8 - 'b' as u8;
                         pn2 = 1;
                     } else {
                         col = c as u8 - '0' as u8;
@@ -158,11 +158,11 @@ impl Board {
     }
 
     // Careful: this function WILL MAKE A MOVE without additional checks on if it's a legal move or not!
-    pub fn make_move(&mut self, mov: Mov) {
+    pub fn make_move(&mut self, mov: &Mov) {
         let piece = self.field[mov.from.y() as usize][mov.from.x() as usize];
 
         // make a move
-        self.history.push(BoardMov{mov, castling: self.castling, en_passant: self.en_passant, hmw: self.hmw});
+        self.history.push(BoardMov{mov: *mov, castling: self.castling, en_passant: self.en_passant, hmw: self.hmw});
         self.field[mov.to.y() as usize][mov.to.x() as usize] = self.field[mov.from.y() as usize][mov.from.x() as usize];
         self.field[mov.from.y() as usize][mov.from.x() as usize] = 0;
 
@@ -305,7 +305,7 @@ impl Board {
     }
 
     pub fn get_legal_moves(&mut self, current_king_check_status: Option<Check>, save_opponent_king_check_status: Option<bool>) -> Vec<Mov> {
-        let mut moves: Vec<Mov> = vec![];
+        let mut moves: Vec<Mov> = Vec::default();
         let check: Check = current_king_check_status.unwrap_or(Check::Unknown);
         let color_bit: u8 = self.white_to_move as u8;
         let save: bool = save_opponent_king_check_status.unwrap_or(false);
@@ -320,8 +320,7 @@ impl Board {
                             if piece == self.gpl(&'p') {
                                 self.add_legal_moves_p(&mut moves, y, x, color_bit);
                             } else if piece == self.gpl(&'k') {
-                                // to clarify: we need only pseudo-legal moves here
-                                self.add_legal_moves_k(&mut moves, y, x, color_bit, Some(Check::NotInCheck));
+                                self.add_legal_moves_k(&mut moves, y, x, color_bit, Some(check));
                             } else if piece == self.gpl(&'n') {
                                 self.add_legal_moves_n(&mut moves, y, x, color_bit);
                             } else if piece == self.gpl(&'b') {
@@ -335,11 +334,12 @@ impl Board {
                         }
                     }
                 }
+                self.add_legal_moves_en_passant(&mut moves);
                 // make careful search if in check for each move for every piece!
                 let mut i = 0;
                 let mut len = moves.len();
                 while i < len {
-                    self.make_move(moves[i]);
+                    self.make_move(&moves[i]);
                     let current_king: &Coord = self.get_current_king_coord(false);
                     if self.is_under_attack(current_king.y(), current_king.x(), self.white_to_move, [true; 5]) {
                         moves[i] = moves[len - 1];
@@ -377,11 +377,12 @@ impl Board {
                         }
                     }
                 }
+                self.add_legal_moves_en_passant(&mut moves);
                 // make simple search on if in check
                 let mut i = 0;
                 let mut len = moves.len();
                 while i < len {
-                    self.make_move(moves[i]);
+                    self.make_move(&moves[i]);
                     let current_king: &Coord = self.get_current_king_coord(false);
 
                     // if it's not a king's move, b/r/q search will be sufficient, but otherwise...
@@ -413,7 +414,7 @@ impl Board {
                 let mut i = 0;
                 let mut len = moves.len();
                 while i < len {
-                    self.make_move(moves[i]);
+                    self.make_move(&moves[i]);
                     if self.is_under_attack(current_king.y(), current_king.x(), self.white_to_move, [true; 5]) {
                         moves[i] = moves[len - 1];
                         moves.pop();
@@ -843,13 +844,17 @@ impl Board {
                 }
             } else {
                 if self.castling & self.gcl(&'k') > 0 && self.field[7][5] < 2 && self.field[7][6] < 2 {
-                    if check == Check::NotInCheck || !self.is_under_attack(7, 4, false, [true, true, true, false, true]) {
-                        vec.push(Mov{data: 1, from: Coord::new(7, 4), to: Coord::new(7, 6)});
+                    if !(self.is_under_attack(7, 5, true, [true; 5]) || self.is_under_attack(7, 6, true, [true; 5])) {
+                        if check == Check::NotInCheck || !self.is_under_attack(7, 4, true, [true, true, true, false, true]) {
+                            vec.push(Mov{data: 1, from: Coord::new(7, 4), to: Coord::new(7, 6)});
+                        }
                     }
                 }
                 if self.castling & self.gcl(&'q') > 0 && self.field[7][3] < 2 && self.field[7][2] < 2 && self.field[7][1] < 2 {
-                    if check == Check::NotInCheck || !self.is_under_attack(7, 4, false, [true, true, true, false, true]) {
-                        vec.push(Mov{data: 1, from: Coord::new(7, 4), to: Coord::new(7, 2)});
+                    if !(self.is_under_attack(7, 3, true, [true; 5]) || self.is_under_attack(7, 2, true, [true; 5])) {
+                        if check == Check::NotInCheck || !self.is_under_attack(7, 4, true, [true, true, true, false, true]) {
+                            vec.push(Mov{data: 1, from: Coord::new(7, 4), to: Coord::new(7, 2)});
+                        }
                     }
                 }
             }
@@ -912,13 +917,6 @@ impl Board {
                         }
                     }
                 }
-                // TODO: move to a different fuction, shouldn't being checked here every single time
-                // en passant
-                if self.en_passant.y() == 5 && y == 4 {
-                    if x + 1 == self.en_passant.x() || x == self.en_passant.x() + 1 {
-                        vec.push(Mov{data: self.gpls(&'p') | 1, from: Coord::new(y, x), to: self.en_passant.clone()});
-                    }
-                }
             }
         } else {
             // basically copy-paste
@@ -973,10 +971,37 @@ impl Board {
                         }
                     }
                 }
-                // en passant
-                if self.en_passant.y() == 2 && y == 3 {
-                    if x + 1 == self.en_passant.x() || x == self.en_passant.x() + 1 {
-                        vec.push(Mov{data: self.gpls(&'p') | 1, from: Coord::new(y, x), to: self.en_passant.clone()});
+            }
+        }
+    }
+
+    // it's better to have it outside of add_legal_moves_p function
+    fn add_legal_moves_en_passant(& self, vec: &mut Vec<Mov>) {
+        if self.en_passant.y() < 8 {
+            if self.en_passant.y() == 5 {
+                if Board::in_bound_single(self.en_passant.x() + 1, 0) {
+                    if self.field[4][self.en_passant.x() as usize + 1] == self.gpl(&'P') {
+                        vec.push(Mov{ data: self.gpls(&'p') | 1, from: Coord::new(4, self.en_passant.x() + 1), to: self.en_passant.clone() });
+                        return;
+                    }
+                }
+                if Board::in_bound_single(self.en_passant.x(), 1) {
+                    if self.field[4][self.en_passant.x() as usize - 1] == self.gpl(&'P') {
+                        vec.push(Mov{ data: self.gpls(&'p') | 1, from: Coord::new(4, self.en_passant.x() - 1), to: self.en_passant.clone() });
+                        return;
+                    }
+                }
+            } else if self.en_passant.y() == 2 {
+                if Board::in_bound_single(self.en_passant.x() + 1, 0) {
+                    if self.field[3][self.en_passant.x() as usize + 1] == self.gpl(&'p') {
+                        vec.push(Mov{ data: self.gpls(&'p') | 1, from: Coord::new(3, self.en_passant.x() + 1), to: self.en_passant.clone() });
+                        return;
+                    }
+                }
+                if Board::in_bound_single(self.en_passant.x(), 1) {
+                    if self.field[3][self.en_passant.x() as usize - 1] == self.gpl(&'p') {
+                        vec.push(Mov{ data: self.gpls(&'p') | 1, from: Coord::new(3, self.en_passant.x() - 1), to: self.en_passant.clone() });
+                        return;
                     }
                 }
             }
@@ -1137,6 +1162,92 @@ impl Board {
     pub fn print_history(& self) {
         for bmov in &self.history {
             println!("{}", move_to_user(&self, &bmov.mov));
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::utils::move_to_board;
+
+    // Tests on getting legal moves correct from a given position
+
+    #[test]
+    fn test_board_get_legal_moves_01() {
+        let mut b = Board::parse_fen(&"r4nkr/1QRPPppq/2PB4/8/1n6/6N1/5PP1/1R4K1 w - - 0 1".to_string());
+        let moves = b.get_legal_moves(None, None);
+        assert_eq!(moves.len() == 42, true);
+    }
+
+    #[test]
+    fn test_board_get_legal_moves_02() {
+        let mut b = Board::parse_fen(&"r3k2r/pp1ppppp/8/8/2pP4/8/PPP1PPPP/R3K2R b KQkq d3 0 1".to_string());
+        let moves = b.get_legal_moves(None, None);
+        assert_eq!(moves.len() == 25, true);
+    }
+
+    #[test]
+    fn test_board_get_legal_moves_03() {
+        let mut b = Board::parse_fen(&"rnb1kb1r/pppppppp/4q3/8/8/3n4/PPPPPPPP/RNBQKBNR w KQkq - 0 1".to_string());
+        let moves = b.get_legal_moves(None, None);
+        assert_eq!(moves.len() == 1, true);
+    }
+
+    #[test]
+    fn test_board_get_legal_moves_04() {
+        let mut b = Board::parse_fen(&"rnbqkbnr/pp1ppppp/3N4/8/8/4Q3/PPPPPPPP/RNB1KB1R b KQkq - 0 1".to_string());
+        let moves = b.get_legal_moves(None, None);
+        assert_eq!(moves.len() == 0, true);
+    }
+
+    #[test]
+    fn test_board_get_legal_moves_05() {
+        let mut b = Board::parse_fen(&"r3k2r/pp1ppppp/8/8/2pP4/3n4/PPP1PPPP/R3K2R w KQkq - 0 1".to_string());
+        let moves = b.get_legal_moves(None, None);
+        assert_eq!(moves.len() == 5, true);
+    }
+
+    #[test]
+    fn test_board_get_legal_moves_06() {
+        let mut b = Board::parse_fen(&"5k2/5ppp/5PPP/8/8/8/4R3/4R1K1 w - - 0 1".to_string());
+        let moves = b.get_legal_moves(None, None);
+        assert_eq!(moves.len() == 27, true);
+    }
+
+    #[test]
+    fn test_board_get_legal_moves_07() {
+        let mut b = Board::parse_fen(&"r3k2r/p3p2p/7n/3B4/8/8/P6P/R3K2R b KQkq - 0 1".to_string());
+        let moves = b.get_legal_moves(None, None);
+        assert_eq!(moves.len() == 17, true);
+    }
+
+    #[test]
+    fn test_board_make_move_01() {
+        let mut b = Board::new();
+        b.make_move(&move_to_board(&b, &"e2e4".to_string()));
+        b.make_move(&move_to_board(&b, &"b8c6".to_string()));
+        b.make_move(&move_to_board(&b, &"e4e5".to_string()));
+        b.make_move(&move_to_board(&b, &"d7d5".to_string()));
+        b.make_move(&move_to_board(&b, &"e5d6".to_string()));
+        let b2 = Board::parse_fen(&"r1bqkbnr/ppp1pppp/2nP4/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3".to_string());
+        for i in 0..8 {
+            for j in 0..8 {
+                assert_eq!(b.field[i][j] == b2.field[i][j], true);
+            }
+        }
+        b.revert_move();
+        b.revert_move();
+        b.revert_move();
+        b.revert_move();
+        b.revert_move();
+        let d = Board::get_default_board(&b.bimaps);
+        for i in 0..8 {
+            for j in 0..8 {
+                // Yep, it's a correct test! Color bits may leave a little mess, Board will treat them as empty squares.
+                assert_eq!(b.field[i][j] == d[i][j] || b.field[i][j] < 2, true);
+            }
         }
     }
 }

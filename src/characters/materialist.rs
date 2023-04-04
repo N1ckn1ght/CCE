@@ -10,7 +10,6 @@ impl Character for Materialist {
                 if board.field[i][j] < 2 {
                     continue;
                 }
-                // TODO: match is in fact slow, it might be good to have a hashmap here?
                 match board.gpr(&board.field[i][j]) {
                     'p' => score -= 1.0,
                     'P' => score += 1.0,

@@ -4,7 +4,7 @@ pub struct Coord {
 }
 
 impl Coord {
-    pub fn new(y: u8, x: u8) -> Coord {
+    pub fn new(y: u8, x: u8) -> Self {
         let value = (y << 4) + (x & 15);
         Coord{value}
     }

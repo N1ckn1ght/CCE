@@ -2,7 +2,6 @@ mod board;
 mod engine;
 mod characters;
 mod utils;
-mod tests;
 
 use board::board::Board;
 use characters::materialist::Materialist;
@@ -12,12 +11,12 @@ use crate::utils::utils::{move_to_user, move_to_board};
 
 pub fn main() {
     env::set_var("RUST_BACKTRACE", "1");
-    test_loop("rnbqkbnr/pppp1ppp/8/8/4pPP1/P7/1PPPP2P/RNBQKBNR b KQkq f3 0 3".to_string(), &Materialist{}, 4);
+    test_loop("5k2/5ppp/5PPP/8/8/8/4R3/4R1K1 w - - 0 1".to_string(), &Materialist{}, 1);
 }
 
 // some tests
 pub fn test_loop<Char: Character>(FEN: String, char: &Char, half_depth: i8) {
-    let mut b = Board::parse_fen(FEN);
+    let mut b = Board::parse_fen(&FEN);
     let mut engine = Minimax::new();
     loop {
         b.print();
@@ -42,7 +41,7 @@ pub fn test_loop<Char: Character>(FEN: String, char: &Char, half_depth: i8) {
             } else {
                 for i in 0..moves.len() {
                     if move_to_user(&b, &moves[i].mov) == command {
-                        b.make_move(move_to_board(&b, &command));
+                        b.make_move(&move_to_board(&b, &command));
                         success = true;
                         break;
                     }

@@ -12,7 +12,7 @@ impl Eval {
     const BIG_SCORE: f32 = 1048576.0;
     const BIG_MATE: i8 = 127;
 
-    pub fn new(score: f32, mate_in: i8) -> Eval {
+    pub fn new(score: f32, mate_in: i8) -> Self {
         Eval { score, mate_in }
     }
 
@@ -45,73 +45,26 @@ impl PartialEq for Eval {
 
 impl Eq for Eval {}
 
-impl PartialOrd for Eval {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        // expected: -3 -2 -1 ... 1 2 3
-        if self.mate_in == other.mate_in {
-            if self.score == other.score {
-                return Some(Ordering::Equal);
-            }
-            if self.score < other.score {
-                return Some(Ordering::Less);
-            }
-            return Some(Ordering::Greater);
-        }
-        // expected: M-1 M-2 M-3 ... M3 M2 M1
-        if self.mate_in < 0 {
-            if other.mate_in < 0 {
-                if self.mate_in < other.mate_in {
-                    return Some(Ordering::Greater);
-                }
-                return Some(Ordering::Less);
-            }
-            return Some(Ordering::Less);
-        }
-        if other.mate_in <= 0 {
-            return Some(Ordering::Greater);
-        }
-        if self.mate_in == 0 {
-            return Some(Ordering::Less);
-        }
-        if self.mate_in < other.mate_in {
-            return Some(Ordering::Greater);
-        }
-        Some(Ordering::Less)
-    }
-}
-
 impl Ord for Eval {
     fn cmp(&self, other: &Self) -> Ordering {
         // expected: -3 -2 -1 ... 1 2 3
         if self.mate_in == other.mate_in {
-            if self.score == other.score {
-                return Ordering::Equal;
-            }
-            if self.score < other.score {
-                return Ordering::Less;
-            }
-            return Ordering::Greater;
+            return self.score.total_cmp(&other.score);
         }
-        // expected: M-1 M-2 M-3 ... M3 M2 M1
-        if self.mate_in < 0 {
-            if other.mate_in < 0 {
-                if self.mate_in < other.mate_in {
-                    return Ordering::Greater;
-                }
-                return Ordering::Less;
-            }
-            return Ordering::Less;
+        // expected: M-3 M-2 M-1 ... M1 M2 M3
+        if self.mate_in > 0 && other.mate_in > 0 {
+            return self.mate_in.cmp(&other.mate_in).reverse().then(Ordering::Less)
         }
-        if other.mate_in <= 0 {
-            return Ordering::Greater;
+        if self.mate_in < 0 && other.mate_in < 0 {
+            return self.mate_in.cmp(&other.mate_in).reverse().then(Ordering::Greater)
         }
-        if self.mate_in == 0 {
-            return Ordering::Less;
-        }
-        if self.mate_in < other.mate_in {
-            return Ordering::Greater;
-        }
-        Ordering::Less
+        self.mate_in.signum().cmp(&other.mate_in.signum()) // .then(Ordering::Equal)
+    }
+}
+
+impl PartialOrd for Eval {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -119,4 +72,177 @@ impl Ord for Eval {
 pub struct EvalMov {
     pub mov: Mov,
     pub eval: Eval
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cmp::{min, max};
+    
+    // Eval comparator tests
+
+    #[test]
+    fn test_eval_basic_cmp_01() {
+        let a = Eval { score: 0.0, mate_in: 0 };
+        let b = Eval { score: 0.0, mate_in: 1 };
+        assert_eq!(a < b, true);
+    }
+
+    #[test]
+    fn test_eval_basic_cmp_02() {
+        let a = Eval { score: 0.0, mate_in: 0 };
+        let c = Eval { score: 0.0, mate_in: -1};
+        assert_eq!(a > c, true);
+    }
+
+    #[test]
+    fn test_eval_basic_cmp_03() {
+        let a = Eval { score: 0.0, mate_in: 0 };
+        let d = Eval { score: 0.0, mate_in: -2};
+        assert_eq!(a > d, true);
+    }
+
+    #[test]
+    fn test_eval_basic_cmp_04() {
+        let b = Eval { score: 0.0, mate_in: 1 };
+        let d = Eval { score: 0.0, mate_in: -2};
+        assert_eq!(b > d, true);
+    }
+
+    #[test]
+    fn test_eval_basic_cmp_05() {
+        let c = Eval { score: 0.0, mate_in: -1};
+        let d = Eval { score: 0.0, mate_in: -2};
+        assert_eq!(c < d, true);
+    }
+
+    #[test]
+    fn test_eval_basic_cmp_06() {
+        let a = Eval { score: 0.0, mate_in: 0 };
+        assert_eq!(a == a, true);
+    }
+
+    #[test]
+    fn test_eval_basic_cmp_07() {
+        let a = Eval { score: 0.0, mate_in: 0 };
+        let e = Eval { score: 1.0, mate_in: 0 };
+        assert_eq!(a < e, true);
+    }
+
+    #[test]
+    fn test_eval_basic_cmp_08() {
+        let a = Eval { score: 0.0, mate_in: 0 };
+        let f = Eval { score: -1., mate_in: 0 };
+        assert_eq!(a > f, true);
+    }
+
+    #[test]
+    fn test_eval_basic_cmp_09() {
+        let a = Eval { score: 0.0, mate_in: 0 };
+        let g = Eval { score: 1.0, mate_in: -1};
+        assert_eq!(a > g, true);
+    }
+
+    #[test]
+    fn test_eval_basic_cmp_10() {
+        let g = Eval { score: 1.0, mate_in: -1};
+        assert_eq!(g == g, true);
+    }
+
+    #[test]
+    fn test_eval_basic_cmp_11() {
+        let c = Eval { score: 0.0, mate_in: -1};
+        let g = Eval { score: 1.0, mate_in: -1};
+        assert_eq!(g > c, true);
+    }
+
+    #[test]
+    fn test_eval_std_cmp_01() {
+        let a = Eval { score: 1.0, mate_in: 1};
+        let b = Eval { score: 0.0, mate_in: 0};
+        assert_eq!(min(a, b) == b, true);
+    }
+
+    #[test]
+    fn test_eval_std_cmp_02() {
+        let a = Eval { score: 1.0, mate_in: 1};
+        let b = Eval { score: 0.0, mate_in: 0};
+        assert_eq!(min(b, a) == b, true);
+    }
+
+    #[test]
+    fn test_eval_std_cmp_03() {
+        let a = Eval { score: 1.0, mate_in: 1};
+        let b = Eval { score: 0.0, mate_in: 0};
+        assert_eq!(max(a, b) == a, true);
+    }
+
+    #[test]
+    fn test_eval_std_cmp_04() {
+        let c = Eval { score: 0.0, mate_in: 1};
+        let d = Eval { score: 0.0, mate_in: -1};
+        assert_eq!(max(c, d) == c, true);
+    }
+
+    #[test]
+    fn test_eval_std_cmp_05() {
+        let c = Eval { score: 0.0, mate_in: 1};
+        let e = Eval { score: 0.0, mate_in: 2};
+        assert_eq!(max(c, e) == c, true);
+    }
+
+    #[test]
+    fn test_eval_std_cmp_07() {
+        let f = Eval { score: 10.0, mate_in: 2};
+        let g = Eval { score: 9.0, mate_in: 1};
+        assert_eq!(max(f, g) == g, true);
+    }
+
+    #[test]
+    fn test_eval_std_cmp_08() {
+        let f = Eval { score: 17.0, mate_in: 2};
+        let g = Eval { score: 9.0, mate_in: 1};
+        assert_eq!(min(f, g) == f, true);
+    }
+
+    #[test]
+    fn test_eval_std_cmp_09() {
+        let f = Eval { score: 10.0, mate_in: -2};
+        let g = Eval { score: 9.0, mate_in: -1};
+        assert_eq!(max(f, g) == f, true);
+    }
+
+    #[test]
+    fn test_eval_std_cmp_10() {
+        let f = Eval { score: -17.0, mate_in: -2};
+        let g = Eval { score: -9.0, mate_in: -1};
+        assert_eq!(min(f, g) == g, true);
+    }
+
+    #[test]
+    fn test_eval_advanced_cmp_01() {
+        let a = Eval { score: 15., mate_in: 0};
+        let b = Eval { score: -15., mate_in: 0 };
+        let c = Eval { score: 0., mate_in: 16 };
+        let d = Eval { score: 0., mate_in: -16 };
+        assert_eq!(a > b, true);
+        assert_eq!(a < c, true);
+        assert_eq!(a > d, true);
+        assert_eq!(b < c, true);
+        assert_eq!(b > d, true);
+        assert_eq!(c > d, true);
+    }
+
+    #[test]
+    fn test_eval_advanced_cmp_02() {
+        let a = Eval { score: 15., mate_in: 0};
+        let b = Eval { score: -15., mate_in: 0 };
+        let c = Eval { score: 0., mate_in: 16 };
+        let d = Eval { score: 0., mate_in: -16 };
+        assert_eq!(a == a, true);
+        assert_eq!(b == b, true);
+        assert_eq!(c == c, true);
+        assert_eq!(d == d, true);
+    }
 }
