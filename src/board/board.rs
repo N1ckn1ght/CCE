@@ -53,7 +53,7 @@ pub struct Board {
 impl Board {
     pub fn new() -> Self {
         let bimaps = Bimaps::init();
-        Board{
+        Self {
             field: Board::get_default_board(&bimaps),
             history: Vec::new(),
             white_to_move: true,
@@ -152,7 +152,7 @@ impl Board {
             }
         }
 
-        Board{field, history, white_to_move, en_passant, castling, hmw, no, white_king_location, black_king_location, bimaps}
+        Self { field, history, white_to_move, en_passant, castling, hmw, no, white_king_location, black_king_location, bimaps }
     }
 
     // Careful: this function WILL MAKE A MOVE without additional checks on if it's a legal move or not!
@@ -347,7 +347,7 @@ impl Board {
                     }
                     self.revert_move();
                 }
-            }
+            },
             Check::NotInCheck => {
                 // still scan for any pseudo-legal moves
                 for y in 0..8 {

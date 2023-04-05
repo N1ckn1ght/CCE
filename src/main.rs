@@ -11,7 +11,7 @@ use crate::utils::utils::{move_to_user, move_to_board};
 
 pub fn main() {
     env::set_var("RUST_BACKTRACE", "1");
-    test_loop("5k2/5ppp/5PPP/8/8/8/4R3/4R1K1 w - - 0 1", &Materialist{}, 2);
+    test_loop("rnbqkbnr/pppp1ppp/8/8/4pPP1/P7/1PPPP2P/RNBQKBNR b KQkq f3 0 3", &Materialist{}, 2);
 }
 
 // some tests
@@ -20,7 +20,7 @@ pub fn test_loop<Char: Character>(FEN: &str, char: &Char, half_depth: i8) {
     let mut engine = Minimax::new();
     loop {
         b.print();
-        let moves = engine.eval(&mut b, char, half_depth);
+        let moves = engine.eval(&mut b, char, half_depth, true);
         println!("Total moves: {}", moves.len());
         for emov in &moves {
             println!("{}, score: {}, mate_in: {}", move_to_user(&b, &emov.mov), emov.eval.score, emov.eval.mate_in);

@@ -9,7 +9,7 @@ pub struct Hashtable {
 }
 
 impl Hashtable {
-    pub fn new(seed: u64) -> Hashtable {
+    pub fn new(seed: u64) -> Self {
         let mut table = [[[0; 12]; 8]; 8];
         let mut rng = StdRng::seed_from_u64(seed);
         for row in &mut table {
@@ -30,7 +30,7 @@ impl Hashtable {
                 *col = rng.next_u64();
             }
         }
-        Hashtable { table, color, castlings, en_passant }
+        Self { table, color, castlings, en_passant }
     }
 
     // won't include move counters
