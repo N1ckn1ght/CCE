@@ -1,9 +1,9 @@
-use crate::{engine::character::Character, board::board::{Board, Check}};
+use crate::{engine::{character::Character, eval::EvalMov}, board::{board::Board, mov::Mov}};
 
 pub struct Materialist;
 
 impl Character for Materialist {
-    fn static_eval(&self, board: &Board, check: Check, legal_moves_count: u8) -> f32 {
+    fn static_eval(&self, board: &Board) -> f32 {
         let mut score: f32 = 0.0;
         for i in 0..8 {
             for j in 0..8 {
@@ -27,7 +27,14 @@ impl Character for Materialist {
                 }
             }
         }
-
         score
+    }
+
+    fn static_eval_mate(&self, board: &Board) -> f32 {
+        self.static_eval(board)
+    }
+
+    fn get_move(&mut self, _board: &Board, evals: &[EvalMov]) -> Mov {
+        evals[0].mov
     }
 }

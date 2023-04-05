@@ -6,7 +6,7 @@ use crate::board::{board::Board, mov::Mov, coord::Coord};
 
 // warning: this function works assuming that the usermove is already legit!
 //          this function also won't add any check bits to the mov.
-pub fn move_to_board(board: &Board, umov: &String) -> Mov {
+pub fn move_to_board(board: &Board, umov: &str) -> Mov {
     let chars: Vec<char> = umov.chars().collect();
     let from     = Coord::new(chars[1] as u8 - 49, chars[0] as u8 - 97);
     let to       = Coord::new(chars[3] as u8 - 49, chars[2] as u8 - 97);
@@ -18,11 +18,11 @@ pub fn move_to_board(board: &Board, umov: &String) -> Mov {
         data |= board.grls(&chars[4]) | 1;
     }
     // castle handling (TODO: accept fischer castlings)
-    else if board.field[from.y() as usize][from.x() as usize] == board.gpl(&'k') + color_bit as u8 && max(from.x(), to.x()) - min(from.x(), to.x()) > 1 {
+    else if board.field[from.y() as usize][from.x() as usize] == board.gpl(&'k') + color_bit && max(from.x(), to.x()) - min(from.x(), to.x()) > 1 {
         data |= 1;
     }
     // en passant handling
-    else if board.field[from.y() as usize][from.x() as usize] == board.gpl(&'p') + color_bit as u8 && board.en_passant.y() == to.y() && board.en_passant.x() == to.x() {
+    else if board.field[from.y() as usize][from.x() as usize] == board.gpl(&'p') + color_bit && board.en_passant.y() == to.y() && board.en_passant.x() == to.x() {
         data |= 1;
         // add pawn capture as well
         data |= board.gpls(&'p');

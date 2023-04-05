@@ -67,7 +67,7 @@ impl Board {
         }
     }
 
-    pub fn parse_fen(FEN: &String) -> Self {
+    pub fn parse_fen(FEN: &str) -> Self {
         let mut field: [[u8; 8]; 8] = [[0; 8]; 8];
         let history: Vec<BoardMov> = Vec::new();
         let mut white_to_move: bool = true;
@@ -88,15 +88,13 @@ impl Board {
         for part in parts {
             if pn == 0 {
                 for c in part.chars() {
-                    if c >= '1' && c <= '8' {
-                        col += c as u8 - '0' as u8;
+                    if ('1'..='8').contains(&c) {
+                        col += c as u8 - b'0';
                     } else if c == '/' {
-                        if row > 0 {
-                            row -= 1;
-                        }
+                        row = row.saturating_sub(1);
                         col = 0;
                     } else {
-                        field[row as usize][col as usize] = bimaps.pieces.get_by_left(&c).unwrap().clone();
+                        field[row as usize][col as usize] = *bimaps.pieces.get_by_left(&c).unwrap();
 
                         // Addon
                         if c == 'k' {
@@ -137,10 +135,10 @@ impl Board {
                         if c == '-' {
                             break;
                         }
-                        row = c as u8 - 'b' as u8;
+                        row = c as u8 - b'b';
                         pn2 = 1;
                     } else {
-                        col = c as u8 - '0' as u8;
+                        col = c as u8 - b'0';
                         en_passant.set(row, col);
                     }
                 }
@@ -227,21 +225,17 @@ impl Board {
             }
         }
         // watchout for a rook move that will prevent future castling as well
-        else if piece == self.gpl(&'r') {
-            if mov.from.y() == 7 {
-                if mov.from.x() == 0 {
-                    self.castling &= 16;
-                } else if mov.from.x() == 7 {
-                    self.castling &= 32;
-                }
+        else if piece == self.gpl(&'r') && mov.from.y() == 7 {
+            if mov.from.x() == 0 {
+                self.castling &= 16;
+            } else if mov.from.x() == 7 {
+                self.castling &= 32;
             }
-        } else if piece == self.gpl(&'R') {
-            if mov.from.y() == 0 {
-                if mov.from.x() == 0 {
-                    self.castling &= 64;
-                } else if mov.from.x() == 7 {
-                    self.castling &= 128;
-                }
+        } else if piece == self.gpl(&'R') && mov.from.y() == 0 {
+            if mov.from.x() == 0 {
+                self.castling &= 64;
+            } else if mov.from.x() == 7 {
+                self.castling &= 128;
             }
         }
 
@@ -250,7 +244,7 @@ impl Board {
             self.hmw = 0;
         }
         self.white_to_move = !self.white_to_move;
-        self.no = self.no + self.white_to_move as u16;
+        self.no += self.white_to_move as u16;
         self.en_passant = temp_en_passant;
     }
 
@@ -300,7 +294,7 @@ impl Board {
             }
         }
 
-        self.no = self.no - self.white_to_move as u16;
+        self.no -= self.white_to_move as u16;
         self.white_to_move = !self.white_to_move;
     }
 
@@ -609,13 +603,12 @@ impl Board {
 
     // check if opponent's king is attacking this cell
     fn is_under_attack_k(& self, y: u8, x: u8, color_of_attacker: bool) -> bool {
-        let king: &Coord;
-        if color_of_attacker {
-            king = &self.white_king_location;
+        let king: &Coord = if color_of_attacker {
+            &self.white_king_location
         } else {
-            king = &self.black_king_location;
-        }
-        return max(king.y(), y) - min(king.y(), y) < 2 && max(king.x(), x) - min(king.x(), x) < 2;
+            &self.black_king_location
+        };
+        max(king.y(), y) - min(king.y(), y) < 2 && max(king.x(), x) - min(king.x(), x) < 2
     }
 
     // check if opponent's pawn is attacking this cell
@@ -979,30 +972,16 @@ impl Board {
     fn add_legal_moves_en_passant(& self, vec: &mut Vec<Mov>) {
         if self.en_passant.y() < 8 {
             if self.en_passant.y() == 5 {
-                if Board::in_bound_single(self.en_passant.x() + 1, 0) {
-                    if self.field[4][self.en_passant.x() as usize + 1] == self.gpl(&'P') {
-                        vec.push(Mov{ data: self.gpls(&'p') | 1, from: Coord::new(4, self.en_passant.x() + 1), to: self.en_passant.clone() });
-                        return;
-                    }
-                }
-                if Board::in_bound_single(self.en_passant.x(), 1) {
-                    if self.field[4][self.en_passant.x() as usize - 1] == self.gpl(&'P') {
-                        vec.push(Mov{ data: self.gpls(&'p') | 1, from: Coord::new(4, self.en_passant.x() - 1), to: self.en_passant.clone() });
-                        return;
-                    }
+                if Board::in_bound_single(self.en_passant.x() + 1, 0) && self.field[4][self.en_passant.x() as usize + 1] == self.gpl(&'P') {
+                    vec.push(Mov{ data: self.gpls(&'p') | 1, from: Coord::new(4, self.en_passant.x() + 1), to: self.en_passant });
+                } else if Board::in_bound_single(self.en_passant.x(), 1) && self.field[4][self.en_passant.x() as usize - 1] == self.gpl(&'P') {
+                    vec.push(Mov{ data: self.gpls(&'p') | 1, from: Coord::new(4, self.en_passant.x() - 1), to: self.en_passant });
                 }
             } else if self.en_passant.y() == 2 {
-                if Board::in_bound_single(self.en_passant.x() + 1, 0) {
-                    if self.field[3][self.en_passant.x() as usize + 1] == self.gpl(&'p') {
-                        vec.push(Mov{ data: self.gpls(&'p') | 1, from: Coord::new(3, self.en_passant.x() + 1), to: self.en_passant.clone() });
-                        return;
-                    }
-                }
-                if Board::in_bound_single(self.en_passant.x(), 1) {
-                    if self.field[3][self.en_passant.x() as usize - 1] == self.gpl(&'p') {
-                        vec.push(Mov{ data: self.gpls(&'p') | 1, from: Coord::new(3, self.en_passant.x() - 1), to: self.en_passant.clone() });
-                        return;
-                    }
+                if Board::in_bound_single(self.en_passant.x() + 1, 0) && self.field[3][self.en_passant.x() as usize + 1] == self.gpl(&'p') {
+                    vec.push(Mov{ data: self.gpls(&'p') | 1, from: Coord::new(3, self.en_passant.x() + 1), to: self.en_passant });
+                } else if Board::in_bound_single(self.en_passant.x(), 1) && self.field[3][self.en_passant.x() as usize - 1] == self.gpl(&'p') {
+                    vec.push(Mov{ data: self.gpls(&'p') | 1, from: Coord::new(3, self.en_passant.x() - 1), to: self.en_passant });
                 }
             }
         }
@@ -1044,33 +1023,33 @@ impl Board {
 
     // pieces by left'n'right values
     pub fn gpl(& self, piece: &char) -> u8 {
-        self.bimaps.pieces.get_by_left(piece).unwrap().clone()
+        *self.bimaps.pieces.get_by_left(piece).unwrap()
     }
     pub fn gpr(& self, value: &u8) -> char {
-        self.bimaps.pieces.get_by_right(value).unwrap().clone()
+        *self.bimaps.pieces.get_by_right(value).unwrap()
     }
     // castles by left'n'right values
     pub fn gcl(& self, castle: &char) -> u8 {
-        self.bimaps.castles.get_by_left(castle).unwrap().clone()
+        *self.bimaps.castles.get_by_left(castle).unwrap()
     }
     pub fn gcr(& self, value: &u8) -> char {
-        self.bimaps.castles.get_by_right(value).unwrap().clone()
+        *self.bimaps.castles.get_by_right(value).unwrap()
     }
     // promotions by left'n'right values
     pub fn grl(& self, promotion: &char) -> u8 {
-        self.bimaps.promotions.get_by_left(promotion).unwrap().clone()
+        *self.bimaps.promotions.get_by_left(promotion).unwrap()
     }
     pub fn grr(& self, value: &u8) -> char {
-        self.bimaps.promotions.get_by_right(value).unwrap().clone()
+        *self.bimaps.promotions.get_by_right(value).unwrap()
     }
 
     // get piece value by char with bit the shift to store in Mov
     pub fn gpls(& self, piece: &char) -> u8 {
-        (self.bimaps.pieces.get_by_left(piece).unwrap().clone() & 254) << self.bimaps.shift_piece
+        (*self.bimaps.pieces.get_by_left(piece).unwrap() & 254) << self.bimaps.shift_piece
     }
     // get promotion value by char with bit the shift to store in Mov
     pub fn grls(& self, piece: &char) -> u8 {
-        self.bimaps.promotions.get_by_left(piece).unwrap().clone() << self.bimaps.shift_promotion
+        *self.bimaps.promotions.get_by_left(piece).unwrap() << self.bimaps.shift_promotion
     }
 
     // get piece Mov value by Board value (basically transform piece to store in move)
@@ -1111,25 +1090,25 @@ impl Board {
     fn get_default_board(bimaps: &Bimaps) -> [[u8; 8]; 8] {
         let mut field = [[0; 8]; 8];
         for i in 0..8 {
-            field[1][i] = bimaps.pieces.get_by_left(&'P').unwrap().clone();
-            field[6][i] = bimaps.pieces.get_by_left(&'p').unwrap().clone();
+            field[1][i] = *bimaps.pieces.get_by_left(&'P').unwrap();
+            field[6][i] = *bimaps.pieces.get_by_left(&'p').unwrap();
         }
-        field[0][0] = bimaps.pieces.get_by_left(&'R').unwrap().clone();
-        field[0][1] = bimaps.pieces.get_by_left(&'N').unwrap().clone();
-        field[0][2] = bimaps.pieces.get_by_left(&'B').unwrap().clone();
-        field[0][3] = bimaps.pieces.get_by_left(&'Q').unwrap().clone();
-        field[0][4] = bimaps.pieces.get_by_left(&'K').unwrap().clone();
-        field[0][5] = bimaps.pieces.get_by_left(&'B').unwrap().clone();
-        field[0][6] = bimaps.pieces.get_by_left(&'N').unwrap().clone();
-        field[0][7] = bimaps.pieces.get_by_left(&'R').unwrap().clone();
-        field[7][0] = bimaps.pieces.get_by_left(&'r').unwrap().clone();
-        field[7][1] = bimaps.pieces.get_by_left(&'n').unwrap().clone();
-        field[7][2] = bimaps.pieces.get_by_left(&'b').unwrap().clone();
-        field[7][3] = bimaps.pieces.get_by_left(&'q').unwrap().clone();
-        field[7][4] = bimaps.pieces.get_by_left(&'k').unwrap().clone();
-        field[7][5] = bimaps.pieces.get_by_left(&'b').unwrap().clone();
-        field[7][6] = bimaps.pieces.get_by_left(&'n').unwrap().clone();
-        field[7][7] = bimaps.pieces.get_by_left(&'r').unwrap().clone();
+        field[0][0] = *bimaps.pieces.get_by_left(&'R').unwrap();
+        field[0][1] = *bimaps.pieces.get_by_left(&'N').unwrap();
+        field[0][2] = *bimaps.pieces.get_by_left(&'B').unwrap();
+        field[0][3] = *bimaps.pieces.get_by_left(&'Q').unwrap();
+        field[0][4] = *bimaps.pieces.get_by_left(&'K').unwrap();
+        field[0][5] = *bimaps.pieces.get_by_left(&'B').unwrap();
+        field[0][6] = *bimaps.pieces.get_by_left(&'N').unwrap();
+        field[0][7] = *bimaps.pieces.get_by_left(&'R').unwrap();
+        field[7][0] = *bimaps.pieces.get_by_left(&'r').unwrap();
+        field[7][1] = *bimaps.pieces.get_by_left(&'n').unwrap();
+        field[7][2] = *bimaps.pieces.get_by_left(&'b').unwrap();
+        field[7][3] = *bimaps.pieces.get_by_left(&'q').unwrap();
+        field[7][4] = *bimaps.pieces.get_by_left(&'k').unwrap();
+        field[7][5] = *bimaps.pieces.get_by_left(&'b').unwrap();
+        field[7][6] = *bimaps.pieces.get_by_left(&'n').unwrap();
+        field[7][7] = *bimaps.pieces.get_by_left(&'r').unwrap();
         field
     }
 
@@ -1161,8 +1140,14 @@ impl Board {
 
     pub fn print_history(& self) {
         for bmov in &self.history {
-            println!("{}", move_to_user(&self, &bmov.mov));
+            println!("{}", move_to_user(self, &bmov.mov));
         }
+    }
+}
+
+impl Default for Board {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1176,49 +1161,49 @@ mod tests {
 
     #[test]
     fn test_board_get_legal_moves_01() {
-        let mut b = Board::parse_fen(&"r4nkr/1QRPPppq/2PB4/8/1n6/6N1/5PP1/1R4K1 w - - 0 1".to_string());
+        let mut b = Board::parse_fen(&"r4nkr/1QRPPppq/2PB4/8/1n6/6N1/5PP1/1R4K1 w - - 0 1");
         let moves = b.get_legal_moves(None, None);
         assert_eq!(moves.len() == 42, true);
     }
 
     #[test]
     fn test_board_get_legal_moves_02() {
-        let mut b = Board::parse_fen(&"r3k2r/pp1ppppp/8/8/2pP4/8/PPP1PPPP/R3K2R b KQkq d3 0 1".to_string());
+        let mut b = Board::parse_fen(&"r3k2r/pp1ppppp/8/8/2pP4/8/PPP1PPPP/R3K2R b KQkq d3 0 1");
         let moves = b.get_legal_moves(None, None);
         assert_eq!(moves.len() == 25, true);
     }
 
     #[test]
     fn test_board_get_legal_moves_03() {
-        let mut b = Board::parse_fen(&"rnb1kb1r/pppppppp/4q3/8/8/3n4/PPPPPPPP/RNBQKBNR w KQkq - 0 1".to_string());
+        let mut b = Board::parse_fen(&"rnb1kb1r/pppppppp/4q3/8/8/3n4/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
         let moves = b.get_legal_moves(None, None);
         assert_eq!(moves.len() == 1, true);
     }
 
     #[test]
     fn test_board_get_legal_moves_04() {
-        let mut b = Board::parse_fen(&"rnbqkbnr/pp1ppppp/3N4/8/8/4Q3/PPPPPPPP/RNB1KB1R b KQkq - 0 1".to_string());
+        let mut b = Board::parse_fen(&"rnbqkbnr/pp1ppppp/3N4/8/8/4Q3/PPPPPPPP/RNB1KB1R b KQkq - 0 1");
         let moves = b.get_legal_moves(None, None);
         assert_eq!(moves.len() == 0, true);
     }
 
     #[test]
     fn test_board_get_legal_moves_05() {
-        let mut b = Board::parse_fen(&"r3k2r/pp1ppppp/8/8/2pP4/3n4/PPP1PPPP/R3K2R w KQkq - 0 1".to_string());
+        let mut b = Board::parse_fen(&"r3k2r/pp1ppppp/8/8/2pP4/3n4/PPP1PPPP/R3K2R w KQkq - 0 1");
         let moves = b.get_legal_moves(None, None);
         assert_eq!(moves.len() == 5, true);
     }
 
     #[test]
     fn test_board_get_legal_moves_06() {
-        let mut b = Board::parse_fen(&"5k2/5ppp/5PPP/8/8/8/4R3/4R1K1 w - - 0 1".to_string());
+        let mut b = Board::parse_fen(&"5k2/5ppp/5PPP/8/8/8/4R3/4R1K1 w - - 0 1");
         let moves = b.get_legal_moves(None, None);
         assert_eq!(moves.len() == 27, true);
     }
 
     #[test]
     fn test_board_get_legal_moves_07() {
-        let mut b = Board::parse_fen(&"r3k2r/p3p2p/7n/3B4/8/8/P6P/R3K2R b KQkq - 0 1".to_string());
+        let mut b = Board::parse_fen(&"r3k2r/p3p2p/7n/3B4/8/8/P6P/R3K2R b KQkq - 0 1");
         let moves = b.get_legal_moves(None, None);
         assert_eq!(moves.len() == 17, true);
     }
@@ -1226,12 +1211,12 @@ mod tests {
     #[test]
     fn test_board_make_move_01() {
         let mut b = Board::new();
-        b.make_move(&move_to_board(&b, &"e2e4".to_string()));
-        b.make_move(&move_to_board(&b, &"b8c6".to_string()));
-        b.make_move(&move_to_board(&b, &"e4e5".to_string()));
-        b.make_move(&move_to_board(&b, &"d7d5".to_string()));
-        b.make_move(&move_to_board(&b, &"e5d6".to_string()));
-        let b2 = Board::parse_fen(&"r1bqkbnr/ppp1pppp/2nP4/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3".to_string());
+        b.make_move(&move_to_board(&b, &"e2e4"));
+        b.make_move(&move_to_board(&b, &"b8c6"));
+        b.make_move(&move_to_board(&b, &"e4e5"));
+        b.make_move(&move_to_board(&b, &"d7d5"));
+        b.make_move(&move_to_board(&b, &"e5d6"));
+        let b2 = Board::parse_fen(&"r1bqkbnr/ppp1pppp/2nP4/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3");
         for i in 0..8 {
             for j in 0..8 {
                 assert_eq!(b.field[i][j] == b2.field[i][j], true);

@@ -221,7 +221,7 @@ mod tests {
     }
 
     #[test]
-    fn test_eval_advanced_cmp_01() {
+    fn test_eval_advanced_01() {
         let a = Eval { score: 15., mate_in: 0};
         let b = Eval { score: -15., mate_in: 0 };
         let c = Eval { score: 0., mate_in: 16 };
@@ -235,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn test_eval_advanced_cmp_02() {
+    fn test_eval_advanced_02() {
         let a = Eval { score: 15., mate_in: 0};
         let b = Eval { score: -15., mate_in: 0 };
         let c = Eval { score: 0., mate_in: 16 };
@@ -244,5 +244,17 @@ mod tests {
         assert_eq!(b == b, true);
         assert_eq!(c == c, true);
         assert_eq!(d == d, true);
+    }
+
+    #[test]
+    fn test_eval_advanced_03() {
+        let a = Eval { score: 10., mate_in: 0 };
+        let b = Eval { score: 9.0, mate_in: 1 };
+        assert_eq!(max(a, b) == b, true);
+        assert_eq!(min(a, b) == b, false);
+        assert_eq!(a > b, false);
+        assert_eq!(a < b, true);
+        assert_eq!(a >= b, false);
+        assert_eq!(a <= b, true);
     }
 }
