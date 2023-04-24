@@ -34,9 +34,9 @@ pub struct Board {
     pub castling: u8,
     // half-moves counter since last capture or pawn move
     pub hmw: u8,
-    // move number, shall be incremented after every black move
-    // more safe to use 2 bytes since it's proven possible to have a game with 300 moves or more
-    pub no: u16,
+    // half-moves overall counter
+    // safer to use 2 bytes since it's proven possible to have a game with 300 moves or more
+    pub hno: u16,
 
     // Additional information that's necessary in order to speedup the search of legal moves
     white_king_location: Coord,
@@ -60,7 +60,7 @@ impl Board {
             en_passant: Coord::new(8, 8),
             castling: 240,
             hmw: 0,
-            no: 1,
+            hno: 0,
             white_king_location: Coord::new(0, 4),
             black_king_location: Coord::new(7, 4),
             bimaps
@@ -74,7 +74,7 @@ impl Board {
         let mut en_passant: Coord = Coord::new(8, 8);
         let mut castling: u8 = 0;
         let mut hmw: u8 = 0;
-        let mut no: u16 = 1;
+        let mut hno: u16 = 0;
         let mut white_king_location = Coord::new(0, 4);
         let mut black_king_location = Coord::new(7, 4);
         let bimaps = Bimaps::init();
@@ -147,12 +147,13 @@ impl Board {
                 hmw = part.parse().unwrap();
                 pn = 5;
             } else {
-                no = part.parse().unwrap();
+                hno = part.parse().unwrap();
+                hno = (hno - 1) * 2 + !white_to_move as u16;
                 break;
             }
         }
 
-        Self { field, history, white_to_move, en_passant, castling, hmw, no, white_king_location, black_king_location, bimaps }
+        Self { field, history, white_to_move, en_passant, castling, hmw, hno, white_king_location, black_king_location, bimaps }
     }
 
     // Careful: this function WILL MAKE A MOVE without additional checks on if it's a legal move or not!
@@ -244,7 +245,7 @@ impl Board {
             self.hmw = 0;
         }
         self.white_to_move = !self.white_to_move;
-        self.no += self.white_to_move as u16;
+        self.hno += 1;
         self.en_passant = temp_en_passant;
     }
 
@@ -294,7 +295,7 @@ impl Board {
             }
         }
 
-        self.no -= self.white_to_move as u16;
+        self.hno -= 1;
         self.white_to_move = !self.white_to_move;
     }
 

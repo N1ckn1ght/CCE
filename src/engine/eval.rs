@@ -28,12 +28,20 @@ impl Eval {
         Eval { score: -Eval::BIG_SCORE, mate_in: -1 }
     }
 
+    pub fn higher() -> Eval {
+        Eval { score: -Eval::BIG_SCORE, mate_in: 1 }
+    }
+
+    pub fn lower() -> Eval {
+        Eval { score: Eval::BIG_SCORE, mate_in: -1 }
+    }
+
     pub fn high() -> Eval {
-        Eval { score: 0.0, mate_in: Eval::BIG_MATE }
+        Eval { score: -Eval::BIG_SCORE, mate_in: Eval::BIG_MATE }
     }
 
     pub fn low() -> Eval {
-        Eval { score: 0.0, mate_in: -Eval::BIG_MATE }
+        Eval { score: Eval::BIG_SCORE, mate_in: -Eval::BIG_MATE }
     }
 }
 
