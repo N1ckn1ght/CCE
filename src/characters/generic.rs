@@ -1,8 +1,14 @@
 use crate::{engine::{character::Character, eval::EvalMov}, board::{board::Board, mov::Mov}};
 
-pub struct Materialist;
+pub struct Generic {
+    // heatmap: [[[u64; 12]; 8]; 8],
+    k_cost: [f32; 12],
+    k_threat: f32,
+    k_allign: f32,
+    k_mobility: [f32; 12],
+}
 
-impl Character for Materialist {
+impl Character for Generic {
     fn static_eval(&self, board: &Board) -> f32 {
         let mut score: f32 = 0.0;
         for i in 0..8 {
@@ -36,5 +42,23 @@ impl Character for Materialist {
 
     fn get_move(&mut self, _board: &Board, evals: &[EvalMov]) -> Mov {
         evals[0].mov
+    }
+}
+
+impl Generic {
+    fn count_moves_n() {
+
+    }
+
+    fn count_moves_bq() {
+
+    }
+
+    fn count_moves_rq() {
+
+    }
+
+    fn count_moves_k() {
+        
     }
 }

@@ -3,25 +3,29 @@ use crate::{board::{board::{Board, Check}, mov::{Mov}}};
 use super::{eval::{EvalMov, Eval}, character::Character, hashtable::Hashtable};
 
 pub struct Minimax {
+    // half_depth from a current eval() call
     called_half_depth: i8,
+    // number of a current eval() call for hash calculations, drops to 0 every hash clear
     no: u8,
-    hashtable: Hashtable,
-    hashes: HashMap<u64, EvalHashed>
+    // simple Zobrist hashtable
+    hashtable: Hashtable
 }
 
 impl Minimax {
     pub fn new() -> Self {
-        Self { called_half_depth: 0, no: 0, hashtable: Hashtable::new(2005), hashes: HashMap::new() }
+        Self { called_half_depth: 0, no: 0, hashtable: Hashtable::new(2005) }
+    }
+
+    pub fn new_seeded(zobrist_seed: u64) -> Self {
+        Self { called_half_depth: 0, no: 0, hashtable: Hashtable::new(zobrist_seed) }
     }
 
     // this will copy the first minimax iteration
     // the purpose is to have a vector of evaluated possible moves as an output, not just the best one
     // initial alpha and beta are recommended to be just Eval::high()
-    pub fn eval<Char: Character>(&mut self, board: &mut Board, char: &Char, half_depth: i8, mut alpha: Eval, mut beta: Eval, drop_hash: bool) -> Vec<EvalMov> {
-        if drop_hash {
-            self.hashes.clear();
-            self.no = 0;
-        }
+    pub fn eval<Char: Character>(&mut self, board: &mut Board, char: &Char, half_depth: i8, mut alpha: Eval, mut beta: Eval) -> Vec<EvalMov> {
+        char.hash_play(self.hashtable.hash(board), 0);
+
         if half_depth < 1 {
             panic!("0-half-depth evaluation attempt");
         }
@@ -69,10 +73,10 @@ impl Minimax {
 
     // will return score eval and the mate_in moves if there's a forced checkmate sequence
     pub fn minimax<Char: Character>(&mut self, board: &mut Board, char: &Char, half_depth: i8, mut alpha: Eval, mut beta: Eval, maximize: bool, check: Check) -> Eval {
-        
-        // Work on handling same position is still in progress...
+
         let hash = self.hashtable.hash(board);
         if let Some(evaluated) = self.hashes.get_mut(&hash) {
+            if evaluated.
             let delta = self.called_half_depth - half_depth - evaluated.depth;
             match delta.cmp(&0){
                 // This means we found a quick way to get already evaluated position!
@@ -195,32 +199,6 @@ impl Minimax {
 
         self.hashes.insert(hash, EvalHashed::new(eval, self.called_half_depth - half_depth, self.no));
         eval
-    }
-}
-
-// Sum: 64 + 8 + 8 + 8 = 88 bit (per hashed position)
-pub struct EvalHashed {
-    pub eval: Eval,
-    pub depth: i8,
-    pub no: u8,
-    pub played: u8
-}
-
-impl EvalHashed {
-    pub fn new(eval: Eval, depth: i8, no: u8) -> Self {
-        Self { eval, depth, no, played: 0 }
-    }
-
-    pub fn play(&mut self) {
-        self.played += 1;
-    }
-
-    pub fn unplay(&mut self) {
-        self.played -= 1;
-    }
-
-    pub fn played(& self, threshold: u8) -> bool {
-        self.played >= threshold
     }
 }
 
