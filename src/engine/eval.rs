@@ -16,7 +16,7 @@ impl Eval {
         Eval { score, mate_in }
     }
 
-    pub fn empty() -> Eval {
+    pub fn equal() -> Eval {
         Eval { score: 0.0, mate_in: 0 }
     }
 
@@ -77,9 +77,30 @@ impl PartialOrd for Eval {
 }
 
 // need to store move eval with the move itself
+#[derive(Clone, Copy)]
 pub struct EvalMov {
     pub mov: Mov,
     pub eval: Eval
+}
+
+// Sum: 64 + 8 + 8 + 8 = 88 bit (per hashed position)
+#[derive(Clone, Copy)]
+pub struct EvalHashed {
+    pub eval: Eval,
+    pub depth: i8,
+    pub iter: u8,
+    pub playcount: u8,
+    pub evaluated: bool
+}
+
+impl EvalHashed {
+    pub fn new(iter: u8) -> Self {
+        Self { eval: Eval::equal(), depth: 0, iter, playcount: 1, evaluated: false } 
+    }
+
+    pub fn evaluated(eval: Eval, depth: i8, iter: u8, playcount: u8) -> Self {
+        Self { eval, depth, iter, playcount, evaluated: true }
+    }
 }
 
 
