@@ -25,7 +25,7 @@ pub struct Board {
     // chars: 'p', 'n', 'b', 'r', 'q', 'k' (see Bimaps for further reference)
     pub field: [[u8; 8]; 8],
     // move storage for a takeback (revert) function
-    history: Vec<BoardMov>,
+    pub history: Vec<BoardMov>,
     // 1 - white to move, 0 - black to move 
     pub white_to_move: bool,
     // coordinate of en passant if possible, otherwise 8, 8
@@ -39,8 +39,8 @@ pub struct Board {
     pub hno: u16,
 
     // Additional information that's necessary in order to speedup the search of legal moves
-    white_king_location: Coord,
-    black_king_location: Coord,
+    pub white_king_location: Coord,
+    pub black_king_location: Coord,
 
     // TODO: find a better way to store CONSTANT BIMAPS 
     // (they are not constant because Rust says so! shouldn't even be inside struct)

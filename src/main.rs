@@ -22,10 +22,13 @@ pub fn test_loop<Char: Character>(FEN: &str, char: &mut Char, mut half_depth: i8
     loop {
         println!("\n--------------------------------------------------\n");
         board.print();
-        let moves = char.get_eval_moves(&mut board);
+        // don't do that!
+        // char.clear_cache();
+        let moves = char.get_eval_moves(&mut board).to_vec();
         println!("Total moves: {}", moves.len());
         for emov in &moves {
-            println!("{}, score: {}, mate_in: {}", move_to_user(&board, &emov.mov), emov.eval.score, emov.eval.mate_in);
+            let mate_in = emov.eval.mate_in.signum() * ((emov.eval.mate_in.abs() + 1) >> 1);
+            println!("{}, score: {}, mate_in: {}", move_to_user(&board, &emov.mov), emov.eval.score, mate_in);
         }
         println!();
 
@@ -42,6 +45,7 @@ pub fn test_loop<Char: Character>(FEN: &str, char: &mut Char, mut half_depth: i8
                 return;
             } else if command == "takeback" {
                 board.revert_move();
+                char.takeback();
                 success = true;
             } else if command == "depth up" {
                 half_depth += 2;
@@ -55,12 +59,19 @@ pub fn test_loop<Char: Character>(FEN: &str, char: &mut Char, mut half_depth: i8
                 opt = true;
             } else if command == "rethink" {
                 success = true;
+            } else if command == "top" {
+                if !moves.is_empty() {
+                    let mov = moves[0].mov;
+                    board.make_move(&mov);
+                    char.accept_move(&board);
+                    success = true;
+                }
             } else {
                 for lmov in &legals {
                     if move_to_user(&board, lmov) == command {
                         board.make_move(&move_to_board(&board, &command));
+                        char.accept_move(&board);
                         success = true;
-                        break;
                     }
                 }
             }

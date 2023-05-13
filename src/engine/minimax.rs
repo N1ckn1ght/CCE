@@ -11,7 +11,7 @@ pub fn eval<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval
     }
 
     // set current position on board as played (draw-repetiion case)
-    char.hash_play(char.get_hash(board));
+    char.cache_play(char.make_hash(board));
 
     let mut moves: Vec<Mov> = board.get_legal_moves(Some(Check::Unknown), Some(true));
     let mut evals: Vec<EvalMov> = Vec::default();
@@ -36,11 +36,6 @@ pub fn eval<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval
         }
     }
 
-    // transfer half moves to moves
-    for em in &mut evals {
-        em.eval.mate_in = em.eval.mate_in.signum() *  ((em.eval.mate_in.abs() + 1) >> 1);
-    }
-
     // sort evaluated moves from the best to the worst in according to the current player to move
     if board.white_to_move {
         evals.sort_by(|a, b| b.eval.cmp(&a.eval));
@@ -52,68 +47,34 @@ pub fn eval<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval
 
 // will return score eval and the mate_in moves if there's a forced checkmate sequence
 fn minimax<Char: Character>(board: &mut Board, char: &mut Char, depth: i8, mut alpha: Eval, mut beta: Eval, maximize: bool, check: Check) -> Eval {
-    let hash = char.get_hash(board);
-    let current_hash_iter = char.get_hash_iter();
-    if let Some(eval_hashed) = char.get_mutable_hashed_eval(hash) {
-        if eval_hashed.playcount > 0 {
-            return Eval::equal();
-        }
-        if eval_hashed.evaluated {
-            match depth.cmp(&eval_hashed.depth) {
-                // This means we found a quick way to get already evaluated position!
+    let hash = char.make_hash(board);
+    if char.is_played(hash) {
+        return Eval::equal();
+    }
+    if char.is_evaluated(hash) {
+        let stored_eval = char.get_hashed_eval(hash);
+        let stored_depth = char.get_hashed_depth(hash);
+        if depth < stored_depth {
+            match stored_eval.mate_in.cmp(&0) {
                 Ordering::Less => {
-                    match eval_hashed.eval.mate_in.cmp(&0) {
-                        Ordering::Less => {
-                            if current_hash_iter == eval_hashed.iter {
-                                eval_hashed.eval.mate_in = -depth;
-                            }
-                            return eval_hashed.eval;
-                        },
-                        Ordering::Equal => {
-                            // Just calculate in more depth, there could be a mate in something
-                            // or just a better or a worse position than expected
-                            eval_hashed.playcount += 1;
-                        },
-                        Ordering::Greater => {
-                            if current_hash_iter == eval_hashed.iter {
-                                eval_hashed.eval.mate_in = depth;
-                            }
-                            return eval_hashed.eval;
-                        }
-                    }
+                    let eval = Eval::new(stored_eval.score, -depth);
+                    char.cache_evaluated(hash, eval, depth, true);
+                    return eval;
                 },
-                // This is an already calculated transposition.
                 Ordering::Equal => {
-                    return eval_hashed.eval;
+                    char.cache_play(hash);
                 },
-                // We got there by making some reversible moves in-between.
                 Ordering::Greater => {
-                    match eval_hashed.eval.mate_in.cmp(&0) {
-                        Ordering::Less => {
-                            if current_hash_iter == eval_hashed.iter {
-                                return Eval { score: eval_hashed.eval.score, mate_in: -depth };
-                            } else {
-                                return Eval { score: eval_hashed.eval.score, mate_in: eval_hashed.eval.mate_in };
-                            }
-                        },
-                        Ordering::Equal => {
-                            return eval_hashed.eval;
-                        }
-                        Ordering::Greater => {
-                            if current_hash_iter == eval_hashed.iter {
-                                return Eval { score: eval_hashed.eval.score, mate_in: depth };
-                            } else {
-                                return Eval { score: eval_hashed.eval.score, mate_in: eval_hashed.eval.mate_in };
-                            }
-                        }
-                    }
-                }
+                    let eval = Eval::new(stored_eval.score, depth);
+                    char.cache_evaluated(hash, eval, depth, true);
+                    return eval;
+                },
             }
         } else {
-            eval_hashed.playcount += 1;
+            return stored_eval;
         }
     } else {
-        char.hash_play(hash);
+        char.cache_play(hash);
     }
 
     // It might be even faster to check for half_depth before, but it just feels wrong
@@ -126,11 +87,11 @@ fn minimax<Char: Character>(board: &mut Board, char: &mut Char, depth: i8, mut a
         let eval = match check {
             Check::InCheck | Check::InDoubleCheck => {
                 let mate_in = if maximize {
-                    // White won
-                    depth
-                } else {
                     // Black won
                     -depth
+                } else {
+                    // White won
+                    depth
                 };
                 Eval {
                     score: char.get_static_eval_mate(board),
@@ -143,8 +104,8 @@ fn minimax<Char: Character>(board: &mut Board, char: &mut Char, depth: i8, mut a
                 mate_in: 0
             }
         };
-        char.hash_unplay(hash);
-        char.hash_store(hash, eval, depth);
+        char.cache_unplay(hash);
+        char.cache_evaluated(hash, eval, depth, false);
         return eval;
     }
 
@@ -152,10 +113,12 @@ fn minimax<Char: Character>(board: &mut Board, char: &mut Char, depth: i8, mut a
     moves.sort_by(|a, b| b.data.cmp(&a.data));
 
     if depth >= char.get_static_half_depth() {
-        // TODO: run quiescense search first!
+        // quiescense search
+        
+        
         let eval = Eval { score: char.get_static_eval(board), mate_in: 0 };
-        char.hash_unplay(hash);
-        char.hash_store(hash, eval, depth);
+        char.cache_unplay(hash);
+        char.cache_evaluated(hash, eval, depth, false);
         return eval;
     }
     
@@ -185,8 +148,8 @@ fn minimax<Char: Character>(board: &mut Board, char: &mut Char, depth: i8, mut a
         }
     }
 
-    char.hash_unplay(hash);
-        char.hash_store(hash, eval, depth);
+    char.cache_unplay(hash);
+    char.cache_evaluated(hash, eval, depth, false);
     eval
 }
 

@@ -9,8 +9,8 @@ pub struct Eval {
 }
 
 impl Eval {
-    const BIG_SCORE: f32 = 1048576.0;
-    const BIG_MATE: i8 = 127;
+    pub const BIG_SCORE: f32 = 1048576.0;
+    pub const BIG_MATE: i8 = 127;
 
     pub fn new(score: f32, mate_in: i8) -> Self {
         Eval { score, mate_in }
