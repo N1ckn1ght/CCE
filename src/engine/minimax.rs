@@ -23,7 +23,7 @@ pub fn eval<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval
         board.make_move(mov);
         evals.push(EvalMov{ 
             mov: *mov, 
-            eval: minimax(board, char, 1, alpha, beta, board.white_to_move, board.get_check(&mov.data)) });
+            eval: minimax(board, char, alpha, beta, board.white_to_move, board.get_check(&mov.data), 1, false) });
         board.revert_move();
 
         if board.white_to_move {
@@ -46,7 +46,7 @@ pub fn eval<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval
 }
 
 // will return score eval and the mate_in moves if there's a forced checkmate sequence
-fn minimax<Char: Character>(board: &mut Board, char: &mut Char, depth: i8, mut alpha: Eval, mut beta: Eval, maximize: bool, check: Check) -> Eval {
+fn minimax<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval, mut beta: Eval, maximize: bool, check: Check, depth: i8, force_break: bool) -> Eval {
     let hash = char.make_hash(board);
     if char.is_played(hash) {
         return Eval::equal();
@@ -54,24 +54,45 @@ fn minimax<Char: Character>(board: &mut Board, char: &mut Char, depth: i8, mut a
     if char.is_evaluated(hash) {
         let stored_eval = char.get_hashed_eval(hash);
         let stored_depth = char.get_hashed_depth(hash);
-        if depth < stored_depth {
-            match stored_eval.mate_in.cmp(&0) {
-                Ordering::Less => {
-                    let eval = Eval::new(stored_eval.score, -depth);
-                    char.cache_evaluated(hash, eval, depth, true);
-                    return eval;
-                },
-                Ordering::Equal => {
-                    char.cache_play(hash);
-                },
-                Ordering::Greater => {
-                    let eval = Eval::new(stored_eval.score, depth);
-                    char.cache_evaluated(hash, eval, depth, true);
-                    return eval;
-                },
+        match depth.cmp(&stored_depth) {
+            // Meaining: we got to some evaluated position faster.
+            Ordering::Less => {
+                match stored_eval.mate_in.cmp(&0) {
+                    Ordering::Less => {
+                        let eval = Eval::new(stored_eval.score, -depth);
+                        char.cache_evaluated(hash, eval, depth);
+                        return eval;
+                    },
+                    Ordering::Equal => {
+                        char.cache_play(hash);
+                    },
+                    Ordering::Greater => {
+                        let eval = Eval::new(stored_eval.score, depth);
+                        char.cache_evaluated(hash, eval, depth);
+                        return eval;
+                    }
+                }
+            },
+            // Meaining: we got to some evaluated position by different move order.
+            Ordering::Equal => {
+                return stored_eval;
+            },
+            // Meaining: we got to some evaluated position slower.
+            Ordering::Greater => {
+                match stored_eval.mate_in.cmp(&0) {
+                    Ordering::Less => {
+                        let eval = Eval::new(stored_eval.score, -depth);
+                        return eval;
+                    },
+                    Ordering::Equal => {
+                        return stored_eval;
+                    },
+                    Ordering::Greater => {
+                        let eval = Eval::new(stored_eval.score, depth);
+                        return eval;
+                    }
+                }
             }
-        } else {
-            return stored_eval;
         }
     } else {
         char.cache_play(hash);
@@ -105,51 +126,63 @@ fn minimax<Char: Character>(board: &mut Board, char: &mut Char, depth: i8, mut a
             }
         };
         char.cache_unplay(hash);
-        char.cache_evaluated(hash, eval, depth, false);
+        char.cache_evaluated(hash, eval, depth);
         return eval;
     }
 
     // pre-sort in descending order by Mov data (will fasten a/b pruning)
     moves.sort_by(|a, b| b.data.cmp(&a.data));
 
-    if depth >= char.get_static_half_depth() {
-        // quiescense search
-        
-        
+    if depth >= char.get_dynamic_half_depth() {
         let eval = Eval { score: char.get_static_eval(board), mate_in: 0 };
         char.cache_unplay(hash);
-        char.cache_evaluated(hash, eval, depth, false);
+        char.cache_evaluated(hash, eval, depth);
         return eval;
     }
     
+    let md = depth < char.get_mixed_half_depth();
+    let sd = depth < char.get_static_half_depth();
+    let mut cur = 0;
     if maximize {
         eval = Eval::lowest();
-        for mov in &moves {
-            board.make_move(mov);
-            let temp = minimax(board, char, depth + 1, alpha, beta, board.white_to_move, board.get_check(&mov.data));
+        while cur < moves.len() && (sd || moves[cur].is_dynamic() || (md && (check == Check::InCheck || check == Check::InDoubleCheck))) {
+            board.make_move(&moves[cur]);
+            let temp = minimax(board, char, alpha, beta, board.white_to_move, board.get_check(&moves[cur].data), depth + 1, false);
             board.revert_move();
             eval = max(eval, temp);
             alpha = max(alpha, temp);
             if beta <= alpha {
                 break;
             }
+            cur += 1;
+        }
+        // if we are searching for quiescence we must also take into account the fact that we are not forced to make dynamic moves
+        if !sd && cur < moves.len() && beta > alpha {
+            let temp = Eval { score: char.get_static_eval(board), mate_in: 0 };
+            eval = max(eval, temp);
         }
     } else {
         eval = Eval::highest();
-        for mov in &moves {
-            board.make_move(mov);
-            let temp = minimax(board, char, depth + 1, alpha, beta, board.white_to_move, board.get_check(&mov.data));
+        while cur < moves.len() && (sd || moves[cur].is_dynamic() || (md && (check == Check::InCheck || check == Check::InDoubleCheck))) {
+            board.make_move(&moves[cur]);
+            let temp = minimax(board, char, alpha, beta, board.white_to_move, board.get_check(&moves[cur].data), depth + 1, false);
             board.revert_move();
             eval = min(eval, temp);
             beta = min(beta, temp);
             if beta <= alpha {
                 break;
             }
+            cur += 1;
+        }
+        //
+        if !sd && cur < moves.len() && beta > alpha {
+            let temp = Eval { score: char.get_static_eval(board), mate_in: 0 };
+            eval = min(eval, temp);
         }
     }
 
     char.cache_unplay(hash);
-    char.cache_evaluated(hash, eval, depth, false);
+    char.cache_evaluated(hash, eval, depth);
     eval
 }
 

@@ -43,6 +43,11 @@ impl Eval {
     pub fn low() -> Eval {
         Eval { score: Eval::BIG_SCORE, mate_in: -Eval::BIG_MATE }
     }
+
+    // TODO: maybe there's a better way to do that
+    pub fn unevaluated() -> Eval {
+        Eval { score: f32::MIN, mate_in: i8::MIN }
+    }
 }
 
 impl PartialEq for Eval {
@@ -83,23 +88,21 @@ pub struct EvalMov {
     pub eval: Eval
 }
 
-// Sum: 64 + 8 + 8 + 8 = 88 bit (per hashed position)
+// Sum: 64 + 8 + 8 = 80 bit (per hashed position)
 #[derive(Clone, Copy)]
 pub struct EvalHashed {
     pub eval: Eval,
     pub depth: i8,
-    pub iter: u8,
-    pub playcount: u8,
-    pub evaluated: bool
+    pub playcount: u8
 }
 
 impl EvalHashed {
-    pub fn new(iter: u8) -> Self {
-        Self { eval: Eval::equal(), depth: 0, iter, playcount: 1, evaluated: false } 
+    pub fn new() -> Self {
+        Self { eval: Eval::equal(), depth: 0, playcount: 1 } 
     }
 
-    pub fn evaluated(eval: Eval, depth: i8, iter: u8, playcount: u8) -> Self {
-        Self { eval, depth, iter, playcount, evaluated: true }
+    pub fn evaluated(eval: Eval, depth: i8, playcount: u8) -> Self {
+        Self { eval, depth, playcount }
     }
 }
 

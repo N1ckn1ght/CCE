@@ -11,17 +11,26 @@ pub struct Mov {
 
 impl Mov {
     // return true if this move is a check or a capture
-    // look bimaps for the reference
+    // !! look bimaps for the reference - if it changes, this needs to be changed too
+    // (unsafe method)
     pub fn is_dynamic(&self) -> bool {
         self.data > 7
     }
 
     // return true if this move is NOT a capture or a pawn move
     // does require a board as a context
+    // (safe method)
     pub fn is_repeatable(&self, board: &Board) -> bool {
         let mov = board.history.first().unwrap().mov;
         board.field[mov.to.y() as usize][mov.to.x() as usize] & 254 == board.gpl(&'p') || board.ptpv(mov.data) > 1
     }
+    
+    // return true if it is any check or mate but not just a capture
+    // !! look bimaps for the reference - if it changes, this needs to be changed too
+    // (unsafe method, unused)
+    // pub fn is_check(&self) -> bool {
+    //     self.data > 63
+    // }
 }
 
 // the problem is: more additional info still needs to be stored in case of a move takeback!..

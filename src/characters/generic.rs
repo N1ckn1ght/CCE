@@ -11,12 +11,12 @@ pub struct Generic {
 
     // maximum static half-depth for minimax eval() call
     static_half_depth: i8,
+    // maximum half-static half-depth for minimax eval() call
+    mixed_half_depth: i8,
     // maximum dynamic half-depth for minimax eval() call
     dynamic_half_depth: i8,
     // simple Zobrist hashtable
     hashtable: Hashtable,
-    // number of a current eval() call for hash calculations from the last hash_clear()
-    hash_iter: u8,
     // stored evaluated board positions (temporary cache)
     hashes_temp: HashMap<u64, EvalHashed>,
     // already played positions on board (permanent cache)
@@ -44,6 +44,14 @@ impl Character for Generic {
 
     fn set_static_half_depth(&mut self, half_depth: i8) {
         self.static_half_depth = half_depth;
+    }
+
+    fn set_mixed_half_depth(&mut self, half_depth: i8) {
+        self.mixed_half_depth = half_depth;
+    }
+
+    fn set_dynamic_half_depth(&mut self, half_depth: i8) {
+        self.dynamic_half_depth = half_depth;
     }
 
     fn accept_move(&mut self, board: &Board) {
@@ -87,14 +95,8 @@ impl Character for Generic {
             self.hashes_perm.insert(hash, 1);
         }
         // deal with temporary cache
-        if mov.is_dynamic() {
-            self.hash_iter = 0;
-            self.hashes_temp.clear();
-        } else {
-            self.hash_iter += 1;
-            self.hashes_temp.remove(&hash);
-        }
         self.evals.clear();
+        self.hashes_temp.clear();
     }
 
     fn takeback(&mut self) {
@@ -115,7 +117,6 @@ impl Character for Generic {
         self.hashes_perm_history.pop();
         self.alpha_stack.pop();
         self.beta_stack.pop();
-        self.hash_iter = 0;
     }
 
     fn get_static_eval(&self, board: &Board) -> f32 {
@@ -150,26 +151,26 @@ impl Character for Generic {
         self.static_half_depth
     }
 
+    fn get_mixed_half_depth(&self) -> i8 {
+        self.mixed_half_depth
+    }
+
+    fn get_dynamic_half_depth(&self) -> i8 {
+        self.dynamic_half_depth
+    }
+
     fn make_hash(&self, board: &Board) -> u64 {
         self.hashtable.hash(board)
     }
 
-    fn clear_cache(&mut self) {
-        self.hashes_temp.clear();
-        self.hash_iter = 0;
-    }
-
-    fn cache_evaluated(&mut self, hash: u64, eval: Eval, depth: i8, iter_check: bool) {
+    fn cache_evaluated(&mut self, hash: u64, eval: Eval, depth: i8) {
         if let Some(f) = self.hashes_temp.get_mut(&hash) {
             // if is marked as played and thus already exists
-            if !iter_check || f.iter == self.hash_iter {
-                f.eval = eval;
-                f.evaluated = true;
-                f.depth = depth;
-            }
+            f.eval = eval;
+            f.depth = depth;
         } else {
             // if is not exists and thus not marked as played
-            self.hashes_temp.insert(hash, EvalHashed::evaluated(eval, depth, self.hash_iter, 0));
+            self.hashes_temp.insert(hash, EvalHashed::evaluated(eval, depth, 0));
         }
     }
 
@@ -177,7 +178,7 @@ impl Character for Generic {
         if let Some(f) = self.hashes_temp.get_mut(&hash) {
             f.playcount += 1;
         } else {
-            self.hashes_temp.insert(hash, EvalHashed::new(self.hash_iter));
+            self.hashes_temp.insert(hash, EvalHashed::new());
         }
     }
 
@@ -204,7 +205,7 @@ impl Character for Generic {
 
     fn is_evaluated(&self, hash: u64) -> bool {
         if let Some(f) = self.hashes_temp.get(&hash) {
-            return f.evaluated;
+            return f.eval != Eval::unevaluated();
         } else {
             return false;
         }
@@ -220,14 +221,14 @@ impl Character for Generic {
 }
 
 impl Generic {
-    pub fn new() -> Self {
+    pub fn new(depths: &[i8; 3]) -> Self {
         // TODO: this should be passed as params
         let piece_costs = [1., 255., 3., 3., 4.5, 9.];
         Self { 
             piece_costs,
-            static_half_depth: 4,
-            dynamic_half_depth: 30,
-            hash_iter: 0,
+            static_half_depth: depths[0],
+            mixed_half_depth: depths[1],
+            dynamic_half_depth: depths[2],
             hashtable: Hashtable::new(1024),
             hashes_temp: HashMap::new(),
             hashes_perm: HashMap::new(),

@@ -12,13 +12,13 @@ use crate::{utils::utils::{move_to_user, move_to_board}};
 
 pub fn main() {
     env::set_var("RUST_BACKTRACE", "1");
-    test_loop("k3r3/3r4/8/8/8/8/8/5K2 w - - 0 1", &mut Generic::new(), 6);
+    test_loop("k3r3/3r4/8/8/8/8/8/5K2 w - - 0 1", &mut Generic::new(&[4, 10, 64]));
 }
 
 // some tests
-pub fn test_loop<Char: Character>(FEN: &str, char: &mut Char, mut half_depth: i8) {
+pub fn test_loop<Char: Character>(FEN: &str, char: &mut Char) {
     let mut board = Board::parse_fen(FEN);
-    char.set_static_half_depth(half_depth);
+    let mut half_depth: i8 = char.get_static_half_depth();
     loop {
         println!("\n--------------------------------------------------\n");
         board.print();
