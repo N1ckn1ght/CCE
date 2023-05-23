@@ -22,7 +22,7 @@ pub struct Board {
     // last bit (0 or 1) is a color bit
     // so if field[i][j] is < 2 then it's an empty square
     // otherwise please rely on board.gpl(&char) or board.gpr(&value) methods
-    // chars: 'p', 'n', 'b', 'r', 'q', 'k' (see Bimaps for further reference)
+    // chars: 'p', 'k', 'n', 'b', 'r', 'q' (see Bimaps for further reference)
     pub field: [[u8; 8]; 8],
     // move storage for a takeback (revert) function
     pub history: Vec<BoardMov>,
@@ -744,7 +744,7 @@ impl Board {
         let mut i: u8 = 1;
         let mut coord: Coord;
         let mut piece: u8;
-        while Self::in_bound(y, x, i, 0) {
+        while Self::in_bound_single(y, i) {
             coord = Coord::new(y - i, x);
             piece = self.field[(y - i) as usize][x as usize];
             i += 1;
@@ -758,7 +758,7 @@ impl Board {
             }
         }
         i = 1;
-        while Self::in_bound(y + i, x, 0, 0) {
+        while Self::in_bound_single(y + i, 0) {
             coord = Coord::new(y + i, x);
             piece = self.field[(y + i) as usize][x as usize];
             i += 1;
@@ -772,7 +772,7 @@ impl Board {
             }
         }
         i = 1;
-        while Self::in_bound(y, x + i, 0, 0) {
+        while Self::in_bound_single(x + i, 0) {
             coord = Coord::new(y, x + i);
             piece = self.field[y as usize][(x + i) as usize];
             i += 1;
@@ -786,7 +786,7 @@ impl Board {
             }
         }
         i = 1;
-        while Self::in_bound(y, x, 0, i) {
+        while Self::in_bound_single(x, i) {
             coord = Coord::new(y, x - i);
             piece = self.field[y as usize][(x - i) as usize];
             i += 1;

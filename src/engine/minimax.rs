@@ -9,10 +9,6 @@ pub fn eval<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval
     if char.get_static_half_depth() < 1 {
         panic!("0-half-depth minimax search attempt!\nStatic half depth must be at least 1, ideally divisible by 2.");
     }
-
-    // set current position on board as played (draw-repetiion case)
-    char.cache_play(char.make_hash(board));
-
     let mut moves: Vec<Mov> = board.get_legal_moves(Some(Check::Unknown), Some(true));
     let mut evals: Vec<EvalMov> = Vec::default();
     
@@ -48,6 +44,8 @@ pub fn eval<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval
 // will return score eval and the mate_in moves if there's a forced checkmate sequence
 fn minimax<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval, mut beta: Eval, maximize: bool, check: Check, depth: i8, force_break: bool) -> Eval {
     let hash = char.make_hash(board);
+    let sd = depth < char.get_static_half_depth();
+
     if char.is_played(hash) {
         return Eval::equal();
     }
@@ -57,21 +55,10 @@ fn minimax<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval,
         match depth.cmp(&stored_depth) {
             // Meaining: we got to some evaluated position faster.
             Ordering::Less => {
-                match stored_eval.mate_in.cmp(&0) {
-                    Ordering::Less => {
-                        let eval = Eval::new(stored_eval.score, -depth);
-                        char.cache_evaluated(hash, eval, depth);
-                        return eval;
-                    },
-                    Ordering::Equal => {
-                        char.cache_play(hash);
-                    },
-                    Ordering::Greater => {
-                        let eval = Eval::new(stored_eval.score, depth);
-                        char.cache_evaluated(hash, eval, depth);
-                        return eval;
-                    }
+                if !sd {
+                    return stored_eval;
                 }
+                char.cache_play(hash);
             },
             // Meaining: we got to some evaluated position by different move order.
             Ordering::Equal => {
@@ -141,7 +128,6 @@ fn minimax<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval,
     }
     
     let md = depth < char.get_mixed_half_depth();
-    let sd = depth < char.get_static_half_depth();
     let mut cur = 0;
     if maximize {
         eval = Eval::lowest();
@@ -190,7 +176,7 @@ fn minimax<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval,
 // #[cfg(test)]
 // mod tests {
 //     use super::*;
-//     use crate::{characters::materialist::Materialist, utils::utils::move_to_user};
+//     use crate::{characters::generic::Generic, utils::utils::move_to_user};
 
 //     // Mate-in-X moves minimax engine test
 //     // Default "Materialist" character will be used
@@ -199,7 +185,7 @@ fn minimax<Char: Character>(board: &mut Board, char: &mut Char, mut alpha: Eval,
 //     // Mate in 1, depth 3, linear;
 //     fn test_minimax_find_mate_01() {
 //         let mut b = Board::parse_fen(&"5k2/5ppp/5PPP/8/8/8/4R3/4R1K1 w - - 0 1");
-//         let mut engine = Minimax::new();
+//         let mut c = Generic::new([1, 1, 1]);
 //         let moves = engine.eval(&mut b, &Materialist{}, 6, Eval::lower(), Eval::higher(), true);
 //         assert_eq!(move_to_user(&b, &moves[0].mov) == "e2e8", true);
 //         assert_eq!(moves[0].eval.mate_in == 1, true);

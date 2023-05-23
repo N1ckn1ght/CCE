@@ -22,7 +22,7 @@ impl Mov {
     // (safe method)
     pub fn is_repeatable(&self, board: &Board) -> bool {
         let mov = board.history.first().unwrap().mov;
-        board.field[mov.to.y() as usize][mov.to.x() as usize] & 254 == board.gpl(&'p') || board.ptpv(mov.data) > 1
+        (board.field[mov.to.y() as usize][mov.to.x() as usize] & 254) != board.gpl(&'p') && board.ptpv(mov.data) == 0
     }
     
     // return true if it is any check or mate but not just a capture
