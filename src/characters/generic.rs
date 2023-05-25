@@ -163,43 +163,149 @@ impl Character for Generic {
         }
         
         let mut score: f32 = 0.0;
-        // 
-        let mut white_pawn_islands: f32 = 1.0;
-        let mut black_pawn_islands: f32 = 1.0;
-        let scanned = [[false; 8]; 8];
 
-        for i in 0..8 {
-            for j in 0..8 {
-                if scanned[i][j] || board.field[i][j] < 2 {
-                    continue;
-                }
-                let mut piece = board.field[i][j];
-                let color_bit = piece & 1;
-                piece &= 254;
+        // for i in 0..8 {
+        //     for j in 0..8 {
+        //         if scanned[i][j] || board.field[i][j] < 2 {
+        //             continue;
+        //         }
+        //         let mut piece = board.field[i][j];
+        //         let color_bit = piece & 1;
+        //         piece &= 254;
 
-                // TODO: match by symbols (board.gpl() usage preferred)
-                match piece {
-                    // pawn
-                    2 => {
+        //         // TODO: match by symbols (board.gpl() usage preferred)
+        //         match piece {
+        //             // pawn
+        //             2 => {
                         
-                    },
-                    // king
-                    4 => (),
-                    // knight
-                    6 => (),
-                    // bishop
-                    8 => (),
-                    // rook
-                    10 => {
-                        score += self.scan_for_rq(board, &scanned, i as u8, j as u8, color_bit, 1.0);
-                    }
-                    // queen
-                    12 => (),
-                    //
-                    _ => ()
-                }
+        //             },
+        //             // king
+        //             4 => (),
+        //             // knight
+        //             6 => (),
+        //             // bishop
+        //             8 => (),
+        //             // rook
+        //             10 => {
+        //                 // score += self.scan_for_rq(board, &scanned, i as u8, j as u8, color_bit, 1.0);
+        //             }
+        //             // queen
+        //             12 => (),
+        //             //
+        //             _ => ()
+        //         }
+        //     }
+        // }
 
-                //
+        // advanced squares detection (for passed pawns, outposts)
+        let mut advanced_squares = [[[true; 2]; 8]; 8];
+        let mut pawns_by_verticals: [[i8; 2]; 8] = [[0; 2]; 8];
+        for i in 0..8 {
+            let mut prevented = [false, false];
+            let in_bounds = [i > 0, i < 7];
+            for j in 0..8 {
+                for k in 0..2 {
+                    let index = if k > 0 { 7 - j } else { j };
+                    let piece = board.field[index][i];
+                    if prevented[k] {
+                        advanced_squares[index][i][k] = false;
+                        if in_bounds[0] {
+                            advanced_squares[index][i][k] = false;
+                        }
+                        if in_bounds[1] {
+                            advanced_squares[index][i][k] = false;
+                        }
+                    }
+                    if piece == board.gpl(&'p') + k as u8 {
+                        prevented[k] = true;
+                        pawns_by_verticals[i][k] += 1;
+                    }
+                }
+            }
+        }
+
+        // pawn islands / stacked pawns penalties
+        for k in 0..2 {
+            let mut failed = true;
+            let mut islands = 0;
+            let mut stacked = 0;
+            for i in 0..8 {
+                if pawns_by_verticals[i][k] > 0 {
+                    failed = false;
+                    stacked += pawns_by_verticals[i][k] - 1;
+                } else if !failed {
+                    failed = true;
+                    islands += 1;
+                }
+            }
+            if !failed || islands < 1 {
+                islands += 1;
+            }
+            if k > 0 {
+                score -= self.weights.pawn_islands_penalty[islands] + self.weights.pawn_stacked_penalty * stacked as f32;
+            } else {
+                score += self.weights.pawn_islands_penalty[islands] + self.weights.pawn_stacked_penalty * stacked as f32;
+            }
+        }
+
+        // battery & king threat search
+        // TODO
+        for i in 0..8 {
+            // let counters_battery = [0, 0];
+            // let counters_self_pieces = [0, 0];
+            // // first half are not pawn protected, second half are
+            // let counters_enemy_pieces = [0, 0, 0, 0];
+            // // first half mobile, second half - immobile
+            // let counters_self_pawns = [0, 0, 0, 0];
+            // let counters_enemy_pawns = [0, 0, 0, 0];
+
+            let mut start: [i8; 2] = [-1, -1];
+            let mut inb: [bool; 2] = [false, false];
+            let mut total: [i8; 2] = [0, 0];
+            let mut current: [i8; 2] = [0, 0];
+            let mut points: [f32; 2] = [0., 0.];
+            let mut king_threat: [bool; 2] = [false, false];
+            let mut drop: [bool; 2] = [false, false];
+            
+            for j in 0..8 {
+                // there is a material count (this cycle only)
+                // vertical check
+                let piece = board.field[j][i];
+                let color_bit = piece & 1;
+                if piece < 2 {
+                    // nothing
+                } else {
+                    if piece == board.gpl(&'r') + color_bit || piece == board.gpl(&'q') + color_bit {
+                        // add to material score
+                        if start[color_bit as usize] < 0 {
+                            start[color_bit as usize] = j as i8;
+                        } else {
+                            
+                        }
+                        current[color_bit as usize] += 1;
+
+
+                    } else {
+                    // non-battery piece
+                        // pawn (lane is not open | enemy weakness)
+                        if piece == board.gpl(&'p') + color_bit {
+                            drop[color_bit as usize] = true;
+                        }
+                        
+                        
+                        // pawn (lane is not open) or just a second piece
+
+                        if inb[color_bit as usize] || piece < 4 {
+                            total[color_bit as usize] += current[color_bit as usize];
+                            current[color_bit as usize] = 0;
+                            inb[color_bit as usize] = false;
+                            
+                        } else {
+                        // movable (probably) piece
+                            inb[color_bit as usize] = true;
+                        }
+                    }
+                }
             }
         }
         score
@@ -305,73 +411,19 @@ impl Generic {
         }
     }
 
-    fn scan_fror_n() {
-        todo!();
-    }
-
-    fn scan_for_bq() {
-        todo!();
-    }
-
-    fn scan_for_rq(&self, board: &Board, scanned: &[[bool; 8]; 8], y: u8, x: u8, color_bit: u8, mult: f32) -> f32 {
-        scanned[y as usize][x as usize] = true;
-        
-        // let mut static_value = 0.0;
-        // let mut dynamic_value = 0.0;
-        // let mut piece = board.field[y as usize][x as usize];
-        // let mut temp = 0.0;
-        // static_value += self.weights.material_cost[&board.gpr(&(piece - color_bit))];
-        // static_value + dynamic_value
+    fn battery_search_vertical() -> f32 {
 
         0.0
     }
 
-    fn scan_for_rq_vertical(&self, board: &Board, scanned: &[[bool; 8]; 8], y: u8, x: u8, color_bit: u8, mult: f32) -> f32 {
-        let mut piece = board.field[y as usize][x as usize];
-        let mut i = 1;
-        
-        let mut static_value = self.weights.material_cost[&board.gpr(&(piece - color_bit))];
-        let mut dynamic_value = 0.0;
-
-        while Board::in_bound_single(y + i, 0) {
-            piece = board.field[(y + i) as usize][x as usize];
-            i += 1;
-            if piece < 2 {
-                continue;
-            }
-            if piece % 254 == color_bit && !scanned[(y + i) as usize][x as usize] {
-                if piece == board.gpl(&'r') + color_bit {
-                    static_value += self.scan_for_rq_horizontal(board, scanned, y + i, x, color_bit, mult);
-                } else if piece == board.gpl(&'q') + color_bit {
-                    static_value += self.scan_for_rq_horizontal(board, scanned, y + i, x, color_bit, mult);
-                    static_value += self.scan_for_bq(board, scanned, y + i, x, color_bit, mult);    
-                } else {
-
-                }
-            } else {
-
-            }
-        }
-        i = 1;
-        while Board::in_bound_single(y, i) {
-            piece = board.field[(y + i) as usize][x as usize];
-            i += 1;
-            if piece < 2 {
-                continue;
-            }
-
-        }
+    fn battery_search_horizontal() -> f32 {
 
         0.0
     }
 
-    fn scan_for_rq_horizontal(&self, board: &Board, scanned: &[[bool; 8]; 8], y: u8, x: u8, color_bit: u8, mult: f32) -> f32 {
-        
-        0.0
-    }
+    fn battery_search_diagonal() -> f32 {
 
-    fn scan_for_k() {
-        todo!();
+        0.0
     }
 }
 
@@ -384,16 +436,18 @@ pub struct GenericWeights {
     mobility_min_threshold: HashMap<char, f32>,
     mobility_max_threshold: HashMap<char, f32>,
     //
-    pawn_islands_penalty: f32,
+    pawn_islands_penalty: [f32; 4],
+    pawn_stacked_penalty: f32,
     pawn_advanced_multiplier: f32,
     pawn_passed_multiplier: f32,
     battery_vertical_cost: f32,
     battery_horizontal_cost: f32,
     battery_diagonal_cost: f32,
-    battery_xray_self_multiplier: f32,
-    battery_xray_opponent_multiplier: f32,
-    battery_king_threat_multiplier: f32,
+    // battery_xray_self_multiplier: f32,
+    // battery_xray_opponent_multiplier: f32,
+    king_threat_multiplier: f32,
     defend_cheaper_piece_multiplier: f32,
+    outpost_multiplier: f32,
     // king_safety_k: f32,
     k_kvb: f32    
 }
