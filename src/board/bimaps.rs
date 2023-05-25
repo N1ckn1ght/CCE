@@ -12,6 +12,8 @@ pub struct Bimaps {
     // 6 bits - 7 bits: promotion piece
     // 11 - queen, 10 - knight, 01 - rook, 00 - bishop
     // 8 bit - is this move one of the follows: castling, en passant, promotion?
+    //
+    // !! there are might be unsafe methods in Mov/Board implementation in case of this changes, keep in mind
 
     pub pieces: BiMap::<char, u8>,
     pub castles: BiMap::<char, u8>,
